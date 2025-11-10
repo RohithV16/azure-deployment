@@ -1,0 +1,20 @@
+# Python Dependencies for Deployment Scripts
+# Install with: pip3 install -r requirements.txt
+
+# HTTP library for Azure DevOps API calls
+requests>=2.25.0
+
+# Interactive prompts with autocomplete
+prompt-toolkit>=3.0.0
+
+# Note: The following modules are part of Python's standard library
+# and do not need to be installed:
+# - json
+# - os
+# - sys
+# - base64
+# - time
+# - argparse
+# - threading
+# - datetime
+
