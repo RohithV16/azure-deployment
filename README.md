@@ -188,5 +188,5 @@ Updates JavaScript logic for asset upload validation.
 
 ## 🦸 Author
 
-**Rohith V (Jarvis)**  
-AEM Developer & Automation Engineer — Merkle  
+**Rohith V && Gaurav Rahate **  
+Senior AEM Developer — Merkle  
