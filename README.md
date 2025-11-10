@@ -50,7 +50,7 @@ If you prefer to install Python dependencies globally instead of using a virtual
 python3 -m pip install --upgrade pip
 
 # Step 2: Install required dependencies globally (May cause System Unstable)
-ppython3 -m pip install -r requirements.txt --break-system-packages
+python3 -m pip install -r requirements.txt --break-system-packages
 
 ```
 
