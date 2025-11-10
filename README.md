@@ -41,13 +41,17 @@ pip install requests prompt_toolkit
 
 ---
 
-### ⚙️ Option 2 — Without Virtual Environment
+### ⚙️ Option 2 — Without Virtual Environment (Global Installation)
 
-If you prefer a global installation:
+If you prefer to install Python dependencies globally instead of using a virtual environment, you can run:
 
 ```bash
-# Install dependencies globally
-pip install requests prompt_toolkit
+# Step 1: Upgrade pip (recommended)
+python3 -m pip install --upgrade pip
+
+# Step 2: Install required dependencies globally (May cause System Unstable)
+ppython3 -m pip install -r requirements.txt --break-system-packages
+
 ```
 
 ---
