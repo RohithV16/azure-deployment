@@ -23,38 +23,38 @@ You can set up the environment **either using a virtual environment** or **direc
 
 ---
 
-### 🧩 Option 1 — Using a Virtual Environment (Recommended)
-
 ```bash
-# Step 1: Create and activate virtual environment
-python3 -m venv venv
 
-# macOS/Linux
-source venv/bin/activate
-
-# Windows
-venv\Scripts\activate
-
-# Step 2: Install dependencies
-pip install requests prompt_toolkit
-```
+This guide provides the minimum steps to install and run the **`create_pr.py`** script for automating Azure DevOps pull requests.
 
 ---
 
-### ⚙️ Option 2 — Without Virtual Environment (Global Installation)
+## Setup
 
-If you prefer to install Python dependencies globally instead of using a virtual environment, you can run:
+You only need to do this once.
+
+### 1. Set Your Environment Variable
+
+The script requires an **Azure DevOps Personal Access Token (PAT)** to run.
 
 ```bash
-# Step 1: Upgrade pip (recommended)
-python3 -m pip install --upgrade pip
+# Set this in your terminal session
+export AZURE_DEVOPS_PAT="your_personal_access_token_here"
 
-# Step 2: Install required dependencies globally (May cause System Unstable)
-python3 -m pip install -r requirements.txt --break-system-packages
+# Inside create_pr.py, find this line and change it:
+GIT_REPO_PATH = "/path/to/your/local/aemaacs-life/repo"
+
+
+# For most systems (Linux, Windows)
+pip3 install -r requirements.txt
+
+# --- OR ---
+# If you are on macOS, you may need the --break-system-packages flag
+pip3 install -r requirements.txt --break-system-packages
+
 
 ```
 
----
 
 ## 🔧 Troubleshooting During Dependency Installation
 
@@ -93,6 +93,10 @@ Run the script from your project directory (or specify `--work-dir`).
 ### Basic Command
 ```bash
 python3 create_pr.py
+
+python3 create_pr.py --dry-run
+
+python3 create_pr.py --master-to-dev
 ```
 
 This will:
