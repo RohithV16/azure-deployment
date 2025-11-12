@@ -30,6 +30,8 @@ REPOSITORY_NAME = "aemaacs-life"
 # Teams webhook URL
 TEAMS_WEBHOOK_URL = "https://aegisdentsunetwork.webhook.office.com/webhookb2/c448e610-8c38-45ad-a939-db5a4ece46d5@6e8992ec-76d5-4ea5-8eae-b0c5e558749a/IncomingWebhook/0dc0e4fca542427fb3d6a02281a88574/d881b4fa-b65f-4e61-bb1a-b48354c99b1c/V2WHmoL-a3Tw0P84hKNYK4FI_U6TSWBShEDdqyLnsn9p41"
 
+POWER_AUTOMATE_WEBHOOK_URL = "https://default6e8992ec76d54ea58eaeb0c5e55874.9a.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/1c9b143d398747a6892388f31a230f87/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=tzPM2LVcleQ3UCpAWZG46rQ7-3W5qtXOgrTjAHHYIcw"
+
 # DEV pipeline configuration - no need for mapping functions
 
 # ============================================================================
@@ -59,7 +61,7 @@ def get_repository_id(repo_name=None):
     
     try:
         response = requests.get(repos_url, headers=headers)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             repos_data = response.json()
             if repos_data.get('value'):
                 # If repo_name is specified, find that repo, otherwise return first one
@@ -95,7 +97,7 @@ def get_last_build_info(definition_id=None, include_in_progress=False):
     
     try:
         response = requests.get(builds_url, headers=headers)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             builds = response.json()
             if builds.get('count', 0) > 0:
                 valid_builds = []
@@ -160,7 +162,7 @@ def get_build_status_dynamic(build_id):
     
     try:
         response = requests.get(build_url, headers=headers)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             build_data = response.json()
             return {
                 'source_version': build_data.get('sourceVersion', 'latest'),
@@ -189,7 +191,7 @@ def get_build_status(build_id):
         print(f"🔍 Checking build status for ID: {build_id}")
         response = requests.get(build_url, headers=headers)
         
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             build_data = response.json()
             status_info = {
                 'status': build_data.get('status'),
@@ -287,7 +289,7 @@ def get_latest_tag(repo_name=REPOSITORY_NAME):
     
     try:
         response = requests.get(tags_url, headers=headers)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             refs_data = response.json()
             tags = refs_data.get('value', [])
             
@@ -348,7 +350,7 @@ def get_commit_from_tag(tag_name, repo_name=REPOSITORY_NAME):
     
     try:
         response = requests.get(refs_url, headers=headers)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             refs_data = response.json()
             refs = refs_data.get('value', [])
             
@@ -481,7 +483,7 @@ def get_current_user():
         profile_url = f"{ORG_URL}/_apis/profile/profiles/me?api-version=7.0"
         response = requests.get(profile_url, headers=headers)
         
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             profile_data = response.json()
             return {
                 'id': profile_data.get('id'),
@@ -830,7 +832,7 @@ def verify_commit_on_branch(commit_hash, branch="dev", repo_name=None):
     
     try:
         response = requests.get(commits_url, headers=headers, params=params)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             commits_data = response.json()
             commits = commits_data.get('value', [])
             # If we get results, the commit exists on this branch
@@ -875,7 +877,7 @@ def find_commit_on_branch_by_date(target_date, branch="dev", repo_name=None):
     
     try:
         response = requests.get(commits_url, headers=headers, params=params)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             commits_data = response.json()
             commits = commits_data.get('value', [])
             
@@ -967,7 +969,7 @@ def get_latest_commit_from_branch(branch="dev", repo_name=None):
     
     try:
         response = requests.get(commits_url, headers=headers, params=params)
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             commits_data = response.json()
             commits = commits_data.get('value', [])
             if commits:
@@ -1159,24 +1161,121 @@ def get_pr_merges_after_commit(commit_hash, branch="dev"):
 # ============================================================================
 
 def send_teams_message(webhook_url, message):
-    """Send message to Teams channel via webhook"""
-    teams_payload = {
-        "text": message
-    }
+    """Send message to Teams channel or Power Automate webhook"""
+    
+    payload = {}
+    headers = {"Content-Type": "application/json"}
+    
+    # Check if this is the new Power Automate webhook
+    if webhook_url == POWER_AUTOMATE_WEBHOOK_URL:
+        # This webhook expects a full Adaptive Card payload with an 'attachments' array,
+        # as per the user's reference script and the "attachments is Null" error.
+        
+        # 1. Create the inner Adaptive Card content
+        adaptive_card_content = {
+            "type": "AdaptiveCard",
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "version": "1.2", # Using 1.2 for broad compatibility
+            "body": [
+                {
+                    "type": "TextBlock",
+                    "text": message,  # This is the full, formatted message string
+                    "wrap": True
+                }
+            ]
+        }
+        
+        # 2. Wrap it in the 'attachments' payload required by the Flow
+        #    This structure comes from the user's reference script.
+        payload = {
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "content": adaptive_card_content
+                }
+            ]
+        }
+    else:
+        # This is the original Teams webhook, which expects a simple text payload
+        payload = {
+            "text": message
+        }
     
     try:
-        response = requests.post(webhook_url, json=teams_payload)
+        # Send the request. 
+        # We use json=payload, which automatically sets Content-Type
+        # and serializes the dict to JSON.
+        response = requests.post(webhook_url, json=payload, headers=headers)
         
-        if response.status_code == 200:
-            print("✅ Message sent to Teams successfully!")
+        # Accept 200 (OK) and 202 (Accepted) as success
+        if response.status_code in [200, 202]:
+            print("✅ Message sent successfully!")
             return True
         else:
-            print(f"❌ Failed to send to Teams: {response.status_code}")
-            print(f"Response: {response.text}")
+            # Explicitly print the error if it's not a 2xx
+            print(f"❌ Failed to send message: {response.status_code}")
+            print(f"   Webhook: {webhook_url[:70]}...") 
+            print(f"   Response: {response.text}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        # Catch connection errors, timeouts, etc.
+        print(f"❌ Failed to send message due to request exception: {e}")
+        return False
+    except Exception as e:
+        # Catch any other unexpected error
+        print(f"❌ Error sending message: {e}")
+        return False
+    """Send message to Teams channel or Power Automate webhook"""
+    
+    payload = {}
+    
+    # Check if this is the new Power Automate webhook
+    if webhook_url == POWER_AUTOMATE_WEBHOOK_URL:
+        # This webhook expects a full Adaptive Card payload with an 'attachments' array.
+        # We will wrap our simple text 'message' into the minimum required
+        # Adaptive Card structure to satisfy the flow.
+        payload = {
+            "type": "message",
+            "attachments": [
+                {
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "content": {
+                        "type": "AdaptiveCard",
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "version": "1.2",
+                        "body": [
+                            {
+                                "type": "TextBlock",
+                                "text": message,  # This is your full, formatted message
+                                "wrap": True
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    else:
+        # This is the original Teams webhook, which expects {"text": "..."}
+        payload = {
+            "text": message
+        }
+    
+    try:
+        response = requests.post(webhook_url, json=payload)
+        
+        # Accept 200 (OK) and 202 (Accepted) as success
+        if response.status_code in [200, 202]:
+            print("✅ Message sent successfully!")
+            return True
+        else:
+            print(f"❌ Failed to send message: {response.status_code}")
+            print(f"   Webhook: {webhook_url[:70]}...") # Show which webhook failed
+            print(f"   Response: {response.text}")
             return False
             
     except Exception as e:
-        print(f"❌ Error sending to Teams: {e}")
+        print(f"❌ Error sending message: {e}")
         return False
 
 def send_teams_approval_request(webhook_url, pr_merges, build_info, approver_email=None, pipeline_name="DEV"):
@@ -1247,7 +1346,7 @@ def send_teams_approval_request(webhook_url, pr_merges, build_info, approver_ema
     try:
         response = requests.post(webhook_url, json=teams_payload)
         
-        if response.status_code == 200:
+        if response.status_code in [200, 202]:
             print("✅ Approval request sent to Teams successfully!")
             print("📋 Users should approve on Azure DevOps")
             print("🔗 Build link is included for review")
@@ -1294,7 +1393,15 @@ The following merged PRs have been getting deployed to the development environme
 **Estimated Completion Time:** ~30 minutes
         """
     
-    return send_teams_message(webhook_url, deployment_message.strip())
+    # Determine which webhook to use based on the status
+    if status_type in ["triggered", "succeeded", "failed"]:
+        # Send final build statuses (triggered, succeeded, failed) to the new Power Automate webhook
+        target_webhook = POWER_AUTOMATE_WEBHOOK_URL
+    else:
+        # Send in-progress messages to the original Teams webhook
+        target_webhook = TEAMS_WEBHOOK_URL
+    
+    return send_teams_message(target_webhook, status_message.strip())
 
 def send_teams_approved_message(webhook_url, pr_merges, build_info, approver_name=None):
     """Send approved message to Teams"""
@@ -1346,7 +1453,15 @@ The deployment to DEV environment has been approved.
 **Estimated Completion Time:** ~30 minutes
         """
     
-    return send_teams_message(webhook_url, approved_message.strip())
+    # Determine which webhook to use based on the status
+    if status_type in ["triggered", "succeeded", "failed"]:
+        # Send final build statuses (triggered, succeeded, failed) to the new Power Automate webhook
+        target_webhook = POWER_AUTOMATE_WEBHOOK_URL
+    else:
+        # Send in-progress messages to the original Teams webhook
+        target_webhook = TEAMS_WEBHOOK_URL
+    
+    return send_teams_message(target_webhook, status_message.strip())
 
 def send_teams_build_triggered_message(webhook_url, pr_merges, build_info, new_build_info):
     """Send message when build is triggered after approval"""
@@ -1377,7 +1492,15 @@ The approved deployment is now being processed.
 ✅ Deployment approved and build triggered successfully!
     """
     
-    return send_teams_message(webhook_url, build_triggered_message.strip())
+    # Determine which webhook to use based on the status
+    if status_type in ["triggered", "succeeded", "failed"]:
+        # Send final build statuses (triggered, succeeded, failed) to the new Power Automate webhook
+        target_webhook = POWER_AUTOMATE_WEBHOOK_URL
+    else:
+        # Send in-progress messages to the original Teams webhook
+        target_webhook = TEAMS_WEBHOOK_URL
+    
+    return send_teams_message(target_webhook, status_message.strip())
 
 def format_deployment_message_for_teams(pr_merges, build_info, new_build_info=None):
     """Format deployment message for Teams"""
@@ -1493,7 +1616,15 @@ The deployment to DEV environment has been completed.
 🎉 **Deployment to DEV environment is now live!**
     """
     
-    return send_teams_message(TEAMS_WEBHOOK_URL, deployment_completed_message.strip())
+    # Determine which webhook to use based on the status
+    if status_type in ["triggered", "succeeded", "failed"]:
+        # Send final build statuses (triggered, succeeded, failed) to the new Power Automate webhook
+        target_webhook = POWER_AUTOMATE_WEBHOOK_URL
+    else:
+        # Send in-progress messages to the original Teams webhook
+        target_webhook = TEAMS_WEBHOOK_URL
+    
+    return send_teams_message(target_webhook, status_message.strip())
 
 def send_pipeline_status_update(pr_merges, build_info, build_status, status_type, pipeline_name="DEPLOYMENT"):
     """Send pipeline status update to Teams"""
@@ -1604,7 +1735,15 @@ The deployment is still running. Current status update:
 🔄 **Still monitoring...**
         """
     
-    return send_teams_message(TEAMS_WEBHOOK_URL, status_message.strip())
+    # Determine which webhook to use based on the status
+    if status_type in ["triggered", "succeeded", "failed"]:
+        # Send final build statuses (triggered, succeeded, failed) to the new Power Automate webhook
+        target_webhook = POWER_AUTOMATE_WEBHOOK_URL
+    else:
+        # Send in-progress messages to the original Teams webhook
+        target_webhook = TEAMS_WEBHOOK_URL
+
+    return send_teams_message(target_webhook, status_message.strip())
 
 def monitor_deployment_progress(pr_merges, build_info, max_wait_minutes=120, pipeline_name="DEPLOYMENT", branch=None, tag_info=None):
     """Monitor deployment progress with smart intervals and dynamic PR updates"""
