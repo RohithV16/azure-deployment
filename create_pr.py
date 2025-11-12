@@ -15,6 +15,7 @@ import base64
 import webbrowser
 import random
 import time
+import term_background
 from typing import Optional, Tuple, List
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import Completer, Completion
@@ -1028,13 +1029,39 @@ def select_from_menu(options: List[str], title: str = "Select an option", defaul
     def cancel(event):
         event.app.exit(result=None)
     
-    # Style
-    style = Style([
-        ('title', 'bold #00ff00'),
-        ('selected', 'bg:#00ff00 #000000 bold'),
-        ('option', '#ffffff'),
-        ('instruction', '#888888 italic'),
-    ])
+    is_dark = False
+    try:
+        if term_background.is_dark_background():
+            is_dark = True
+    except Exception:
+        # Fallback if term_background fails or is not installed
+        pass
+    # Check the terminal background. Fallback to dark theme if detection fails.
+    if is_dark:
+        # **Dark Theme:** Light text on dark background
+        style = Style([
+            # Title: Bright Green text (e.g., #00ff00)
+            ('title', 'bold #00ff00'), 
+            # Selected: Black text (readable) on Bright Green background
+            ('selected', 'bg:#00ff00 #000000 bold'), 
+            # Option: White text for visibility
+            ('option', '#ffffff'), 
+            # Instruction: Gray italic text
+            ('instruction', '#888888 italic'),
+        ])
+    else:
+        # **Light Theme:** Dark text on light background
+        style = Style([
+            # Title: Dark Blue text (e.g., #00008b)
+            ('title', 'bold #00008b'), 
+            # Selected: White text (readable) on Dark Blue background
+            ('selected', 'bg:#00008b #ffffff bold'), 
+            # Option: Black text for visibility
+            ('option', '#000000'), 
+            # Instruction: Dark Gray italic text
+            ('instruction', '#444444 italic'),
+        ])
+    # --- END THEME/STYLE ADJUSTMENT ---
     
     # Layout
     layout = Layout(Window(content=control))
