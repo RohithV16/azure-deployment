@@ -55,6 +55,15 @@ pip3 install -r requirements.txt --break-system-packages
 
 ```
 
+### Basic Command
+```bash
+python3 create_pr.py
+
+python3 create_pr.py --dry-run
+
+python3 create_pr.py --master-to-dev
+```
+
 
 ## 🔧 Troubleshooting During Dependency Installation
 
@@ -68,36 +77,11 @@ pip3 install -r requirements.txt --break-system-packages
 
 ---
 
-## 🔐 Environment Variables
-
-The script requires an **Azure DevOps Personal Access Token (PAT)** and optionally your **Git repository path**.
-
-### macOS / Linux
-```bash
-export AZURE_DEVOPS_PAT="your_personal_access_token_here"
-export GIT_REPO_PATH="/Users/<username>/Documents/AEM/aemaacs-life"
-```
-
-### Windows PowerShell
-```powershell
-setx AZURE_DEVOPS_PAT "your_personal_access_token_here"
-setx GIT_REPO_PATH "C:\Users\<username>\Documents\AEM\aemaacs-life"
-```
-
----
 
 ## 🚀 Usage
 
 Run the script from your project directory (or specify `--work-dir`).
 
-### Basic Command
-```bash
-python3 create_pr.py
-
-python3 create_pr.py --dry-run
-
-python3 create_pr.py --master-to-dev
-```
 
 This will:
 - Detect your current Git branch  
