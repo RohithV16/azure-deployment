@@ -93,7 +93,7 @@ def get_last_build_info(definition_id=None, include_in_progress=False):
     
     # Use provided definition_id or default
     def_id = definition_id or BUILD_DEFINITION_ID
-    builds_url = f"{ORG_URL}/{PROJECT}/_apis/build/builds?definitions={def_id}&api-version=7.0&$top=10"
+    builds_url = f"{ORG_URL}/{PROJECT}/_apis/build/builds?definitions={def_id}&api-version=7.0&$top=200"
     
     try:
         response = requests.get(builds_url, headers=headers)
@@ -106,10 +106,20 @@ def get_last_build_info(definition_id=None, include_in_progress=False):
                 for build in builds['value']:
                     build_result = build.get('result')
                     build_status = build.get('status')
+                    build_number = build.get('buildNumber', '')
                     
-                    # Collect successful builds
+                    # Collect successful builds - ONLY fullstack
                     if build_result in ['succeeded', 'partiallySucceeded']:
-                        valid_builds.append(build)
+                        # Check templateParameters for deploymentType: Full Stack
+                        template_params = build.get('templateParameters', {})
+                        deployment_type = template_params.get('deploymentType', '')
+                        
+                        if deployment_type == 'Full Stack':
+                            valid_builds.append(build)
+                        else:
+                            # Debug: print skipped builds
+                            # print(f"   Skipping non-fullstack build: {build_number} (Type: {deployment_type})")
+                            pass
                     
                     # Collect in-progress builds (if requested)
                     if include_in_progress and build_status in ['inProgress', 'notStarted']:
@@ -1751,31 +1761,31 @@ def monitor_deployment_progress(pr_merges, build_info, max_wait_minutes=120, pip
     print(f"⏱️  Maximum wait time: {max_wait_minutes} minutes")
     print(f"📊 Initial PRs to monitor: {len(pr_merges)}")
     print(f"🔄 Phase 1: Checking every 30 seconds until build starts running")
-    print(f"🔄 Phase 2: Then checking every 10 minutes until completion")
-    print(f"🔄 PRs will be dynamically updated if new ones are merged during deployment")
+    print(f"🔄 Phase 2: Checking every 10 minutes for first 30 minutes, then every 2 minutes until completion")
     if tag_info:
-        print(f"🏷️  Tag will be updated if new PRs are detected: {tag_info.get('tag_name', 'N/A')}")
+        print(f"🏷️  Tag: {tag_info.get('tag_name', 'N/A')}")
     
     # Get branch - use provided branch or default to DEV branch
     if not branch:
         branch = BRANCH  # Default to "dev" for DEV pipeline
     
-    # Store baseline commit for PR fetching (use baseline_commit if available, otherwise source_version)
+    # Store baseline commit for reference
     baseline_commit = build_info.get('baseline_commit') or build_info.get('source_version')
     current_pr_merges = pr_merges.copy() if pr_merges else []
-    last_pr_count = len(current_pr_merges)
-    pr_update_counter = 0
     
     if baseline_commit:
-        print(f"   Baseline commit for PR detection: {baseline_commit[:8] if len(baseline_commit) > 8 else baseline_commit}")
+        print(f"   Baseline commit: {baseline_commit[:8] if len(baseline_commit) > 8 else baseline_commit}")
     
     start_time = time.time()
     max_wait_seconds = max_wait_minutes * 60
     check_interval_fast = 30
-    check_interval_slow = 600
+    check_interval_slow = 600  # 10 minutes initially
+    check_interval_slow_after_30min = 120  # 2 minutes after 30 minutes in Phase 2
     last_status = None
     triggered_sent = False
     build_is_running = False
+    phase2_start_time = None
+    phase2_30min_switch_announced = False
     
     while True:
         try:
@@ -1801,34 +1811,6 @@ def monitor_deployment_progress(pr_merges, build_info, max_wait_minutes=120, pip
                 print(f"   Duration: {elapsed_time / 60:.1f} minutes")
                 print(f"   Final PR count: {len(current_pr_merges)}")
                 
-                # Final PR check before sending success message
-                if baseline_commit:
-                    try:
-                        final_prs = get_pr_merges_after_commit(baseline_commit, branch)
-                        if final_prs is not None:
-                            # Update tag if PRs changed
-                            if len(final_prs) != len(current_pr_merges) and tag_info and tag_info.get('tag_name'):
-                                print(f"🏷️  Updating tag description with final PR list...")
-                                try:
-                                    new_description = generate_pr_summary(final_prs)
-                                    updated_tag = update_tag_description(
-                                        REPOSITORY_NAME,
-                                        tag_info['tag_name'],
-                                        baseline_commit,
-                                        new_description,
-                                        branch
-                                    )
-                                    if updated_tag:
-                                        print(f"✅ Tag description updated with final PR list!")
-                                        tag_info = updated_tag
-                                except Exception as e:
-                                    print(f"⚠️  Error updating tag: {e}")
-                            
-                            current_pr_merges = final_prs
-                            print(f"✅ Final PR check: {len(current_pr_merges)} PRs in deployment")
-                    except Exception as e:
-                        print(f"⚠️  Could not do final PR check: {e}")
-                
                 print("📱 Sending deployment succeeded message to Teams...")
                 send_pipeline_status_update(current_pr_merges, build_info, build_status, "succeeded", pipeline_name)
                 
@@ -1848,53 +1830,6 @@ def monitor_deployment_progress(pr_merges, build_info, max_wait_minutes=120, pip
                 elapsed_minutes = elapsed_time / 60
                 current_status = build_status['status'] if build_status else 'unknown'
             
-            # Periodically update PRs if new ones are merged (every 3rd check when build is running)
-            if build_is_running and baseline_commit:
-                pr_update_counter += 1
-                if pr_update_counter >= 3:  # Update PRs every 3rd check (every ~30 minutes)
-                    pr_update_counter = 0
-                    print(f"🔄 Checking for new PRs merged during deployment...")
-                    try:
-                        updated_prs = get_pr_merges_after_commit(baseline_commit, branch)
-                        if updated_prs is not None and len(updated_prs) > last_pr_count:
-                            new_prs_count = len(updated_prs) - last_pr_count
-                            print(f"✅ Found {new_prs_count} new PR(s) merged during deployment!")
-                            print(f"   Previous PR count: {last_pr_count}")
-                            print(f"   Updated PR count: {len(updated_prs)}")
-                            current_pr_merges = updated_prs
-                            last_pr_count = len(updated_prs)
-                            
-                            # Update tag description if tag exists (for STAGE pipeline)
-                            if tag_info and tag_info.get('tag_name') and baseline_commit:
-                                print(f"🏷️  Updating tag description with new PRs...")
-                                try:
-                                    new_description = generate_pr_summary(current_pr_merges)
-                                    updated_tag = update_tag_description(
-                                        REPOSITORY_NAME,
-                                        tag_info['tag_name'],
-                                        baseline_commit,
-                                        new_description,
-                                        branch
-                                    )
-                                    if updated_tag:
-                                        print(f"✅ Tag description updated successfully!")
-                                        tag_info = updated_tag  # Update tag_info with new data
-                                    else:
-                                        print(f"⚠️  Failed to update tag description, but continuing...")
-                                except Exception as e:
-                                    print(f"⚠️  Error updating tag: {e}, continuing...")
-                            
-                            # Send update message about new PRs
-                            if new_prs_count > 0:
-                                print(f"📱 Sending update about new PRs to Teams...")
-                                send_pipeline_status_update(current_pr_merges, build_info, build_status, "in_progress", pipeline_name)
-                        elif updated_prs is not None:
-                            # PRs haven't changed, but update our reference
-                            current_pr_merges = updated_prs
-                            print(f"ℹ️  No new PRs detected (still {len(updated_prs)} PRs)")
-                    except Exception as e:
-                        print(f"⚠️  Could not update PRs: {e}, continuing with existing PRs")
-            
             if not build_is_running:
                 if not triggered_sent and current_status in ['inProgress']:
                     print("🚀 Build is now running - sending triggered message...")
@@ -1908,8 +1843,9 @@ def monitor_deployment_progress(pr_merges, build_info, max_wait_minutes=120, pip
                         print("❌ Failed to send pipeline triggered message")
                     triggered_sent = True
                     build_is_running = True
+                    phase2_start_time = time.time()  # Track when Phase 2 starts
                     last_status = current_status
-                    print("🔄 Switching to Phase 2: Monitoring every 10 minutes")
+                    print("🔄 Switching to Phase 2: Monitoring every 10 minutes for first 30 minutes, then every 2 minutes")
                 else:
                     print(f"⏳ Waiting for build to start running... ({elapsed_minutes:.1f} minutes elapsed)")
                     print(f"   Status: {current_status}")
@@ -1922,25 +1858,55 @@ def monitor_deployment_progress(pr_merges, build_info, max_wait_minutes=120, pip
                 check_interval = check_interval_fast
                 
             else:
+                # Phase 2: Check if 30 minutes have elapsed since Phase 2 started
+                if phase2_start_time is not None:
+                    phase2_elapsed_time = time.time() - phase2_start_time
+                    phase2_elapsed_minutes = phase2_elapsed_time / 60
+                    
+                    if phase2_elapsed_minutes >= 30:
+                        # After 30 minutes in Phase 2, check every 2 minutes
+                        check_interval = check_interval_slow_after_30min
+                        if not phase2_30min_switch_announced:
+                            print(f"🔄 Phase 2: 30 minutes elapsed - switching to monitoring every 2 minutes")
+                            phase2_30min_switch_announced = True
+                    else:
+                        # First 30 minutes of Phase 2, check every 10 minutes
+                        check_interval = check_interval_slow
+                else:
+                    # Fallback to slow interval if phase2_start_time not set
+                    check_interval = check_interval_slow
+                
                 if last_status != current_status and current_status not in ['inProgress']:
                     print(f"📱 Status changed - sending update to Teams...")
                     print(f"   Old Status: {last_status}")
                     print(f"   New Status: {current_status}")
                     print(f"   Elapsed: {elapsed_minutes:.1f} minutes")
+                    if phase2_start_time is not None:
+                        phase2_elapsed_minutes = (time.time() - phase2_start_time) / 60
+                        print(f"   Phase 2 elapsed: {phase2_elapsed_minutes:.1f} minutes")
                     print(f"   Current PR count: {len(current_pr_merges)}")
                     
                     send_pipeline_status_update(current_pr_merges, build_info, build_status, "in_progress", pipeline_name)
                     last_status = current_status
                 else:
                     print(f"⏳ Build still running... ({elapsed_minutes:.1f} minutes elapsed)")
+                    if phase2_start_time is not None:
+                        phase2_elapsed_minutes = (time.time() - phase2_start_time) / 60
+                        print(f"   Phase 2 elapsed: {phase2_elapsed_minutes:.1f} minutes")
                     print(f"   Status: {current_status}")
                     if last_status != current_status:
                         last_status = current_status
-                
-                check_interval = check_interval_slow
         
             if build_is_running:
-                print(f"🔄 Waiting 10 minutes before next check...")
+                # Show the actual wait time based on Phase 2 elapsed time
+                if phase2_start_time is not None:
+                    phase2_elapsed_minutes = (time.time() - phase2_start_time) / 60
+                    if phase2_elapsed_minutes >= 30:
+                        print(f"🔄 Waiting 2 minutes before next check...")
+                    else:
+                        print(f"🔄 Waiting 10 minutes before next check...")
+                else:
+                    print(f"🔄 Waiting 10 minutes before next check...")
             else:
                 print(f"🔄 Waiting 30 seconds before next check...")
             time.sleep(check_interval)
@@ -1970,44 +1936,8 @@ def automated_deployment_workflow(pr_merges, build_info, approver_email=None, ru
         print(f"🏷️  Tag: {tag_info.get('tag_name', 'N/A')}")
     print()
     
-    # Refresh PRs right before sending approval request to ensure we have the latest
+    # Use the initial PR list throughout the deployment
     current_pr_merges = pr_merges.copy() if pr_merges else []
-    # Use baseline_commit if available (for new builds), otherwise use build's source_version
-    baseline_commit = build_info.get('baseline_commit') or build_info.get('source_version')
-    
-    if branch:
-        print("🔄 Refreshing PR list before sending approval request...")
-        try:
-            # Use baseline commit for PR detection (original build's commit, not new build's)
-            commit_to_use = baseline_commit
-            if not commit_to_use or commit_to_use == 'latest':
-                print("   Baseline commit not available, getting latest commit from branch...")
-                commit_to_use = get_latest_commit_from_branch(branch)
-                if commit_to_use:
-                    print("   Using latest commit as baseline for PR detection")
-                else:
-                    print("   ⚠️  Could not get latest commit, using original PRs")
-                    commit_to_use = None
-            
-            if commit_to_use:
-                refreshed_prs = get_pr_merges_after_commit(commit_to_use, branch)
-                if refreshed_prs is not None:
-                    if len(refreshed_prs) != len(current_pr_merges):
-                        print(f"✅ PR list updated: {len(current_pr_merges)} → {len(refreshed_prs)} PRs")
-                        if len(refreshed_prs) > len(current_pr_merges):
-                            new_prs = len(refreshed_prs) - len(current_pr_merges)
-                            print(f"   📝 Found {new_prs} new PR(s) since last check!")
-                    else:
-                        print(f"✅ PR list verified: {len(refreshed_prs)} PRs (no changes)")
-                    current_pr_merges = refreshed_prs
-                else:
-                    print("⚠️  Could not refresh PRs, using original list")
-            else:
-                print("⚠️  No valid commit available for refresh, using original PRs")
-        except Exception as e:
-            print(f"⚠️  Error refreshing PRs: {e}, using original list")
-            import traceback
-            traceback.print_exc()
     
     print(f"📱 Step 1: Sending approval request to Teams with {len(current_pr_merges)} PR(s)...")
     if send_teams_approval_request(TEAMS_WEBHOOK_URL, current_pr_merges, build_info, approver_email, pipeline_name):
@@ -2015,9 +1945,6 @@ def automated_deployment_workflow(pr_merges, build_info, approver_email=None, ru
     else:
         print("❌ Failed to send approval request")
         return False
-    
-    # Update pr_merges for monitoring to use refreshed list
-    pr_merges = current_pr_merges
     
     if run_in_background:
         print()
@@ -2030,7 +1957,7 @@ def automated_deployment_workflow(pr_merges, build_info, approver_email=None, ru
         def background_monitoring():
             try:
                 print("🔄 Background monitoring thread started...")
-                success, final_status = monitor_deployment_progress(pr_merges, build_info, pipeline_name=pipeline_name, branch=branch, tag_info=tag_info)
+                success, final_status = monitor_deployment_progress(current_pr_merges, build_info, pipeline_name=pipeline_name, branch=branch, tag_info=tag_info)
                 if success:
                     print("🎉 Background monitoring: Deployment completed successfully!")
                 elif success is False:
@@ -2054,7 +1981,7 @@ def automated_deployment_workflow(pr_merges, build_info, approver_email=None, ru
         print("   (This will automatically send updates to Teams)")
         print()
         
-        success, final_status = monitor_deployment_progress(pr_merges, build_info, pipeline_name=pipeline_name, branch=branch, tag_info=tag_info)
+        success, final_status = monitor_deployment_progress(current_pr_merges, build_info, pipeline_name=pipeline_name, branch=branch, tag_info=tag_info)
         
         if success:
             print("🎉 Deployment workflow completed successfully!")
