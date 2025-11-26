@@ -2,10 +2,13 @@
 # Install with: pip3 install -r requirements.txt
 
 # HTTP library for Azure DevOps API calls
-requests>=2.25.0
+requests>=2.32.5
 
 # Interactive prompts with autocomplete
-prompt-toolkit>=3.0.0
+prompt-toolkit>=3.0.52
+
+# Terminal background detection for theme support
+term-background>=1.0.5
 
 # Note: The following modules are part of Python's standard library
 # and do not need to be installed:
