@@ -5,6 +5,23 @@ Automates creation of a pull request with standardized Merkle PR format followin
 Extracts Jira ticket ID from branch name and generates PR content based on git commits and changes.
 """
 
+import sys
+import os
+
+# Auto-activate venv if not already active
+if sys.prefix == sys.base_prefix:
+    # Assuming 'venv' is in the directory of this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_python = os.path.join(script_dir, "venv", "bin", "python")
+    
+    # If not found, check current working directory
+    if not os.path.exists(venv_python):
+         venv_python = os.path.join(os.getcwd(), "venv", "bin", "python")
+
+    if os.path.exists(venv_python):
+        # Re-execute the script with the venv python
+        os.execv(venv_python, [venv_python] + sys.argv)
+
 import subprocess
 import re
 import sys
@@ -824,11 +841,9 @@ def print_conflict_message(source_branch="your branch", target_branch="master"):
 {'═' * 72}
 {RESET}"""
     
-    # Print with typing animation
-    type_out(header, 0.001)
-    time.sleep(0.3)
-    type_out(chosen_theme, 0.002)
-    time.sleep(0.2)
+    # Print without delays
+    type_out(header, 0.0)
+    type_out(chosen_theme, 0.0)
     
     # Footer
     footer = f"""{RED}{BOLD}
@@ -844,28 +859,25 @@ def print_superhero_success(pr_id, pr_title, pr_status, source_branch, target_br
     chosen_title = random.choice(PR_SUCCESS_TITLES)
     themes = get_pr_themes(pr_id, pr_title, pr_status, source_branch, target_branch, pr_url_web or "")
     chosen_theme = random.choice(themes)
-    
+
     # Create animated header
     header = f"""{CYAN}{BOLD}
 {'═' * 72}
        {chosen_title}
 {'═' * 72}
 {RESET}"""
-    
-    # Print with typing animation
-    type_out(header, 0.001)
-    time.sleep(0.5)
-    type_out(chosen_theme, 0.001)
-    time.sleep(0.3)
-    
+
+    # Print without delays
+    type_out(header, 0.0)
+    type_out(chosen_theme, 0.0)
+
     # Final message
     if pr_url_web:
         print(f"{GREEN}{BOLD}🌟 Great work, hero! Opening PR in browser... 🌟{RESET}")
-        time.sleep(1)
         webbrowser.open(pr_url_web)
     else:
         print(f"{GREEN}{BOLD}🌟 Great work, hero! Your PR has been created! 🌟{RESET}")
-    
+
     sys.stdout.flush()
 
 # ============================================================================
@@ -1207,13 +1219,11 @@ def create_pull_request(repo_id, source_branch, target_branch, title, descriptio
         message += f"""{YELLOW}💡 No need to create a duplicate - you're already on the case! 🦸‍♂️{RESET}
 """
         
-        type_out(header, 0.001)
-        time.sleep(0.3)
-        type_out(message, 0.002)
+        type_out(header, 0.0)
+        type_out(message, 0.0)
         
         if pr_url_web:
             print(f"{CYAN}🌐 Opening PR in browser...{RESET}")
-            time.sleep(0.5)
             webbrowser.open(pr_url_web)
         
         return existing_pr

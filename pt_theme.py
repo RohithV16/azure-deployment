@@ -1,3 +1,20 @@
+import sys
+import os
+
+# Auto-activate venv if not already active
+if sys.prefix == sys.base_prefix:
+    # Assuming 'venv' is in the directory of this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_python = os.path.join(script_dir, "venv", "bin", "python")
+    
+    # If not found, check current working directory
+    if not os.path.exists(venv_python):
+         venv_python = os.path.join(os.getcwd(), "venv", "bin", "python")
+
+    if os.path.exists(venv_python):
+        # Re-execute the script with the venv python
+        os.execv(venv_python, [venv_python] + sys.argv)
+
 import random
 import time
 import sys
