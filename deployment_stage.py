@@ -4,6 +4,23 @@ STAGE Pipeline Deployment Automation Script
 Automates deployment workflow for STAGE pipeline (master branch) with release tagging
 """
 
+import sys
+import os
+
+# Auto-activate venv if not already active
+if sys.prefix == sys.base_prefix:
+    # Assuming 'venv' is in the directory of this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_python = os.path.join(script_dir, "venv", "bin", "python")
+    
+    # If not found, check current working directory
+    if not os.path.exists(venv_python):
+         venv_python = os.path.join(os.getcwd(), "venv", "bin", "python")
+
+    if os.path.exists(venv_python):
+        # Re-execute the script with the venv python
+        os.execv(venv_python, [venv_python] + sys.argv)
+
 import requests
 import json
 import os
@@ -1490,7 +1507,7 @@ def send_deployment_completed_message(pr_merges, build_info, final_build_status)
         duration_str = "~30 minutes (estimated)"
     
     deployment_completed_message = f"""
-✅ **DEPLOYMENT COMPLETED SUCCESSFULLY**
+✅ **Stage DEPLOYMENT COMPLETED SUCCESSFULLY**
 
 The deployment to DEV environment has been completed.
 
@@ -1549,7 +1566,7 @@ The {pipeline_name.lower()} deployment pipeline has been triggered and is now ru
         env_name = pipeline_name.upper() if pipeline_name else "DEV"
         
         if build_status.get('result') == 'partiallySucceeded':
-            status_title = "✅ **DEPLOYMENT COMPLETED**"
+            status_title = "✅ ** STAGE DEPLOYMENT COMPLETED**"
             status_desc = f"The deployment to {env_name} environment has completed with partial success."
             status_note = "⚠️ **Some components may have warnings - check build logs for details.**"
         else:
