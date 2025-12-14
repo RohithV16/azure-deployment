@@ -29,10 +29,6 @@ RUN curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/truste
 # Expose the port the app runs on
 EXPOSE 1234
 
-# Environment Variables
-# REPLACE THESE WITH YOUR ACTUAL VALUES
-ENV AZURE_DEVOPS_PAT=""
-ENV NGROK_AUTHTOKEN=""
 
 # Copy startup script
 COPY start.sh /start.sh

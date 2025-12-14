@@ -2,7 +2,7 @@
 
 # Start Gunicorn in the background
 echo "🚀 Starting Gunicorn (Web App)..."
-gunicorn --bind 0.0.0.0:1234 webapp.app:app --preload --workers 1 &
+gunicorn --bind 0.0.0.0:1234 webapp.app:app --preload --workers 3 --timeout 300 &
 
 # Wait for Gunicorn to initialize
 sleep 3
