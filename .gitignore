@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Environment Variables
+.env
+
+# Database
+instance/
+*.db
+*.sqlite3
+site.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Docker
+# Uncomment if you want to exclude build artifacts or overrides
+# docker-compose.override.yml
+
+# Logs
+*.log

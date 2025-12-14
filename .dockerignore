@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.env
+webapp/__pycache__/
+site.db

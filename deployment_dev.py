@@ -179,6 +179,50 @@ def get_last_build_info(definition_id=None, include_in_progress=False):
     
     return None
 
+def get_recent_successful_builds(limit=10):
+    """Get the last N successful builds from Azure DevOps"""
+    headers = get_azure_devops_headers()
+    if not headers:
+        return []
+    
+    # DEV pipeline
+    def_id = BUILD_DEFINITION_ID
+    builds_url = f"{ORG_URL}/{PROJECT}/_apis/build/builds?definitions={def_id}&api-version=7.0&$top=200"
+    
+    recent_builds = []
+    
+    try:
+        response = requests.get(builds_url, headers=headers)
+        if response.status_code in [200, 202]:
+            builds = response.json()
+            if builds.get('count', 0) > 0:
+                for build in builds['value']:
+                    if len(recent_builds) >= limit:
+                        break
+                        
+                    build_result = build.get('result')
+                    # Collect successful builds - ONLY fullstack
+                    if build_result in ['succeeded', 'partiallySucceeded']:
+                        # Check templateParameters for deploymentType: Full Stack
+                        template_params = build.get('templateParameters', {})
+                        deployment_type = template_params.get('deploymentType', '')
+                        
+                        if deployment_type == 'Full Stack':
+                            recent_builds.append({
+                                'build_number': build.get('buildNumber'),
+                                'build_id': build.get('id'),
+                                'source_version': build.get('sourceVersion'),
+                                'start_time': build.get('startTime'),
+                                'finish_time': build.get('finishTime'),
+                                'result': build.get('result'),
+                                'status': build.get('status'),
+                                'requested_for': build.get('requestedFor', {}).get('displayName', 'Unknown')
+                            })
+        return recent_builds
+    except Exception as e:
+        print(f"✗ Error getting recent builds: {e}")
+        return []
+
 def get_build_status_dynamic(build_id):
     """Get dynamic build status from Azure DevOps API"""
     headers = get_azure_devops_headers()

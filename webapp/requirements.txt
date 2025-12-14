@@ -1,0 +1,8 @@
+flask
+flask-login
+flask-sqlalchemy
+requests
+gunicorn
+python-dotenv
+prompt-toolkit
+term-background
