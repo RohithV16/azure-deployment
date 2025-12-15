@@ -1,81 +1,97 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8">
-        <div class="card mb-4">
+<div class="row mb-4">
+    <!-- Create Pull Request Card -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white pt-4 border-bottom-0">
+                <h5 class="mb-0">Create Pull Request</h5>
+            </div>
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h4 class="card-title mb-0">Deployment Control</h4>
-                    <span class="badge bg-success bg-opacity-10 text-success px-3 py-2">Environment: DEV</span>
-                </div>
-
-                <div id="status-section" class="alert alert-light border text-center py-5">
-                    <p class="mb-3 text-muted">Check for new changes before triggering a deployment.</p>
-                    <button id="check-btn" class="btn btn-primary">
-                        <span id="spinner" class="spinner-border spinner-border-sm d-none" role="status"
-                            aria-hidden="true"></span>
-                        Check for Updates
-                    </button>
-                    <div id="status-result" class="mt-4 d-none text-start">
-                        <!-- Result injected here -->
+                <form action="{{ url_for('create_pr_route') }}" method="POST" class="row align-items-end">
+                    <div class="col-md-3 mb-3">
+                        <label for="title" class="form-label">PR Title</label>
+                        <input type="text" class="form-control" id="title" name="title"
+                            placeholder="ADW-XXXX Description" required>
                     </div>
-                </div>
-
-                <div id="deployment-confirm" class="d-none mt-4">
-                    <div class="alert alert-warning border-warning">
-                        <h5>Ready to Deploy?</h5>
-                        <p>You are about to trigger a deployment for the changes listed above.</p>
-                        <form action="{{ url_for('trigger_deployment') }}" method="POST">
-                            <button type="submit" class="btn btn-warning text-dark fw-bold">🚀 Trigger Deployment
-                                Now</button>
-                        </form>
+                    <div class="col-md-3 mb-3">
+                        <label for="source_branch" class="form-label">Source Branch</label>
+                        <input type="text" class="form-control" id="source_branch" name="source_branch"
+                            placeholder="feature/..." required>
                     </div>
-                </div>
+                    <div class="col-md-2 mb-3">
+                        <label for="target_branch" class="form-label">Target</label>
+                        <select class="form-select" id="target_branch" name="target_branch">
+                            <option value="dev" selected>dev</option>
+                            <option value="master">master</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label for="description" class="form-label">Description (Opt)</label>
+                        <input type="text" class="form-control" id="description" name="description">
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <button type="submit" class="btn btn-dark w-100">Create</button>
+                    </div>
+                </form>
             </div>
         </div>
-        <div class="card mb-4">
-            <div class="card-header bg-white pt-4 border-bottom-0">
-                <h5 class="mb-0">Recent Successful Builds (Azure DevOps)</h5>
+    </div>
+</div>
+
+<!-- Environments Row -->
+<div class="row mb-4">
+    <!-- DEV Environment -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-white pt-4 border-bottom-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">DEV Environment</h5>
+                {% if dev_running %}
+                <span class="badge bg-warning text-dark status-badge">⚠️ Deployment In Progress</span>
+                {% else %}
+                <span class="badge bg-success status-badge">Ready</span>
+                {% endif %}
             </div>
             <div class="card-body">
+                <div class="d-grid gap-2 mb-4">
+                    <form action="{{ url_for('trigger_deployment') }}" method="POST">
+                        <button type="submit" class="btn btn-primary w-100" {% if dev_running %}disabled{% endif %}>
+                            {% if dev_running %}🚀 Deployment Running...{% else %}🚀 Trigger DEV Deployment{% endif %}
+                        </button>
+                    </form>
+                </div>
+
+                <h6 class="text-muted mb-3">Recent DEV Builds</h6>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
+                    <table class="table table-hover table-sm">
+                        <thead>
                             <tr>
-                                <th>Build Number</th>
-                                <th>Status</th>
+                                <th>Build</th>
                                 <th>Result</th>
-                                <th>Finished</th>
-                                <th>Triggered By</th>
+                                <th>Time</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for build in azure_builds %}
+                            {% if dev_builds %}
+                            {% for build in dev_builds %}
                             <tr>
+                                <td>#{{ build.build_number }}</td>
                                 <td>
-                                    <span class="fw-medium">{{ build.build_number }}</span>
-                                    <br>
-                                    <small class="text-muted">Source: {{ build.source_version[:8] }}</small>
+                                    <span
+                                        class="badge {% if build.result == 'succeeded' or build.result == 'partiallySucceeded' %}bg-success{% elif build.result == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                        {% if build.result == 'partiallySucceeded' %}succeeded{% else %}{{ build.result
+                                        }}{% endif %}
+                                    </span>
                                 </td>
-                                <td>{{ build.status }}</td>
-                                <td>
-                                    {% if build.result == 'succeeded' %}
-                                    <span class="badge bg-success">Succeeded</span>
-                                    {% elif build.result == 'partiallySucceeded' %}
-                                    <span class="badge bg-warning text-dark">Partial</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">{{ build.result }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ build.finish_time[:16].replace('T', ' ') if build.finish_time else 'N/A' }}</td>
-                                <td><small>{{ build.requested_for }}</small></td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="5" class="text-center text-muted">No recent builds found or API error.</td>
+                                <td class="small text-muted">{{ build.finish_time.split('T')[0] }}</td>
                             </tr>
                             {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">No recent builds</td>
+                            </tr>
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>
@@ -83,43 +99,71 @@
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="card mb-4">
-            <div class="card-header bg-white pt-4 border-bottom-0">
-                <h5 class="mb-0">Create Pull Request</h5>
+    <!-- STAGE Environment -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-white pt-4 border-bottom-0 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">STAGE Environment</h5>
+                {% if stage_running %}
+                <span class="badge bg-warning text-dark status-badge">⚠️ Deployment In Progress</span>
+                {% else %}
+                <span class="badge bg-success status-badge">Ready</span>
+                {% endif %}
             </div>
             <div class="card-body">
-                <form action="{{ url_for('create_pr_route') }}" method="POST">
-                    <div class="mb-3">
-                        <label for="source_branch" class="form-label">Source Branch</label>
-                        <input type="text" class="form-control" id="source_branch" name="source_branch"
-                            placeholder="feature/ADW-..." required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="target_branch" class="form-label">Target Branch</label>
-                        <select class="form-select" id="target_branch" name="target_branch">
-                            <option value="dev" selected>dev</option>
-                            <option value="master">master</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="title" class="form-label">PR Title</label>
-                        <input type="text" class="form-control" id="title" name="title"
-                            placeholder="ADW-XXXX [Merkle] Description" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
-                        <textarea class="form-control" id="description" name="description" rows="3"></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-dark w-100">Create Pull Request</button>
-                </form>
+                <div class="d-grid gap-2 mb-4">
+                    <button onclick="triggerStage()" class="btn btn-primary w-100" {% if stage_running %}disabled{%
+                        endif %}>
+                        {% if stage_running %}🚀 Deployment Running...{% else %}🚀 Trigger STAGE Deployment{% endif %}
+                    </button>
+                </div>
+
+                <h6 class="text-muted mb-3">Recent STAGE Builds</h6>
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>Build</th>
+                                <th>Result</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if stage_builds %}
+                            {% for build in stage_builds %}
+                            <tr>
+                                <td>#{{ build.build_number }}</td>
+                                <td>
+                                    <span
+                                        class="badge {% if build.result == 'succeeded' or build.result == 'partiallySucceeded' %}bg-success{% elif build.result == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                        {% if build.result == 'partiallySucceeded' %}succeeded{% else %}{{ build.result
+                                        }}{% endif %}
+                                    </span>
+                                </td>
+                                <td class="small text-muted">{{ build.finish_time.split('T')[0] }}</td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">No recent builds</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
+    </div>
+</div>
 
+<!-- Local Logs (Keeping for history) -->
+<div class="row">
+    <div class="col-12">
         <div class="card">
             <div class="card-header bg-white border-bottom-0 pt-4">
-                <h5 class="mb-0">Recent Activity</h5>
+                <h5 class="mb-0">Local Activity Log</h5>
             </div>
+
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% for log in logs %}
@@ -201,5 +245,38 @@
                 resultDiv.innerHTML = `<div class="text-danger">Network Error: ${error}</div>`;
             });
     });
+
+    function triggerStage() {
+        if (!confirm('Are you sure you want to trigger STAGE deployment?')) return;
+
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '🚀 Starting...';
+
+        fetch('/stage', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Reload to show running status
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    }
 </script>
 {% endblock %}

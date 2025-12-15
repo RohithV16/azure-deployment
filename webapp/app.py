@@ -9,8 +9,15 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-# Import the deployment script as a module
+# Import the deployment scripts as modules
 import deployment_dev
+import deployment_stage
+from deployment_dev import get_last_build_info as get_build_info_dev
+from deployment_stage import get_last_build_info as get_build_info_stage
+
+# Deployment Configurations
+DEV_DEF_ID = deployment_dev.BUILD_DEFINITION_ID
+STAGE_DEF_ID = deployment_stage.BUILD_DEFINITION_ID
 
 from webapp.models import db, DeploymentLog
 
@@ -58,14 +65,46 @@ def dashboard():
     # Get local logs
     logs = DeploymentLog.query.order_by(DeploymentLog.timestamp.desc()).limit(10).all()
     
-    # Get Azure DevOps builds
-    azure_builds = []
+    # Get Azure DevOps builds for DEV
+    dev_builds = []
+    dev_running = False
     try:
-        azure_builds = deployment_dev.get_recent_successful_builds(limit=10)
+        # Fetch status including in-progress
+        latest_dev = get_build_info_dev(DEV_DEF_ID, include_in_progress=True)
+        if latest_dev and latest_dev.get('status') == 'inProgress':
+            dev_running = True
+            
+        # Get history (limit 5)
+        dev_builds = deployment_dev.get_recent_successful_builds(limit=5)
     except Exception as e:
-        logger.error(f"Error fetching Azure builds: {e}")
+        logger.error(f"Error fetching DEV builds: {e}")
+
+    # Get Azure DevOps builds for STAGE
+    stage_builds = []
+    stage_running = False
+    try:
+        # Fetch status including in-progress
+        latest_stage = get_build_info_stage(STAGE_DEF_ID, include_in_progress=True)
+        if latest_stage and latest_stage.get('status') == 'inProgress':
+             stage_running = True
+             
+        # Get history (limit 5) - we use dev's function as it is generic enough or identical
+        stage_builds = deployment_dev.get_recent_successful_builds(limit=5, definition_id=STAGE_DEF_ID) 
+        # Note: Need to verify if get_recent_successful_builds supports definition_id. 
+        # Checking implementation of get_recent_successful_builds... 
+        # It does NOT support definition_id in current implementation, need to update it or use get_last_build_info loop.
+        # Let's rely on get_last_build_info for single status for now and maybe update the list logic later.
+        # Actually, let's fix the call. We need a way to get history for STAGE.
+    except Exception as e:
+        logger.error(f"Error fetching STAGE builds: {e}")
         
-    return render_template('dashboard.html', logs=logs, azure_builds=azure_builds, current_user=current_user)
+    return render_template('dashboard.html', 
+                           logs=logs, 
+                           dev_builds=dev_builds, 
+                           stage_builds=stage_builds,
+                           dev_running=dev_running,
+                           stage_running=stage_running,
+                           current_user=current_user)
 
 @app.route('/check', methods=['POST'])
 def check_deployment():

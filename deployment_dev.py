@@ -179,14 +179,14 @@ def get_last_build_info(definition_id=None, include_in_progress=False):
     
     return None
 
-def get_recent_successful_builds(limit=10):
+def get_recent_successful_builds(limit=10, definition_id=None):
     """Get the last N successful builds from Azure DevOps"""
     headers = get_azure_devops_headers()
     if not headers:
         return []
     
-    # DEV pipeline
-    def_id = BUILD_DEFINITION_ID
+    # Use provided definition_id or default
+    def_id = definition_id or BUILD_DEFINITION_ID
     builds_url = f"{ORG_URL}/{PROJECT}/_apis/build/builds?definitions={def_id}&api-version=7.0&$top=200"
     
     recent_builds = []
