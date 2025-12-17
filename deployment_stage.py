@@ -211,22 +211,63 @@ def get_build_status(build_id):
         
         if response.status_code in [200, 202]:
             build_data = response.json()
+            # Extract deployment type from template parameters
+            template_params = build_data.get('templateParameters', {})
+            deployment_type = template_params.get('deploymentType', '')
+            
             status_info = {
                 'status': build_data.get('status'),
                 'result': build_data.get('result'),
                 'build_number': build_data.get('buildNumber'),
                 'finish_time': build_data.get('finishTime'),
-                'start_time': build_data.get('startTime')
+                'start_time': build_data.get('startTime'),
+                'deployment_type': deployment_type
             }
             print(f"✅ Build status retrieved: {status_info['status']} - {status_info['result']}")
             return status_info
         else:
             print(f"❌ Failed to get build status: {response.status_code}")
-            print(f"Response: {response.text}")
+            # print(f"Response: {response.text}") # Reduce noise
             return None
     except Exception as e:
         print(f"❌ Error getting build status: {e}")
         return None
+
+def get_build_timeline(build_id):
+    """Get the timeline for a specific build to check stage status"""
+    headers = get_azure_devops_headers()
+    if not headers:
+        return None
+    
+    url = f"{ORG_URL}/{PROJECT}/_apis/build/builds/{build_id}/timeline?api-version=7.0"
+    
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            return None
+        else:
+            print(f"❌ Failed to fetch timeline: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"❌ Error fetching timeline: {e}")
+        return None
+
+def is_stage_active_or_completed(timeline, stage_name):
+    """Check if a specific stage is active (in progress) or completed"""
+    if not timeline or 'records' not in timeline:
+        return False
+    
+    for record in timeline['records']:
+        if record.get('type') == 'Stage' and record.get('name') == stage_name:
+            state = record.get('state')
+            # User wants to switch to Phase 2 when stage is "approved and in progress"
+            # So we check if it's inProgress or already completed
+            if state in ['inProgress', 'completed']:
+                return True
+    
+    return False
 
 def trigger_new_build(definition_id=None, branch=None, tag=None):
     """Trigger a new build for specified definition and branch or tag"""
@@ -1802,22 +1843,45 @@ def monitor_deployment_progress(pr_merges, build_info, max_wait_minutes=120, pip
             
             if not build_is_running:
                 if not triggered_sent and current_status in ['inProgress']:
-                    print("🚀 Build is now running - sending triggered message...")
-                    print(f"   Previous status: {last_status}")
-                    print(f"   Current status: {current_status}")
-                    print(f"   PRs in this deployment: {len(current_pr_merges)}")
-                    success = send_pipeline_status_update(current_pr_merges, build_info, build_status, "triggered", pipeline_name)
-                    if success:
-                        print("✅ Pipeline triggered message sent successfully!")
+                    deployment_type = build_status.get('deployment_type', '')
+                    
+                    # Only send started notification for Full Stack deployments
+                    # AND only switch to Phase 2 when the specialized stage is complete if it's a Full Stack deployment
+                    should_switch_to_phase2 = False
+                    
+                    if deployment_type == 'Full Stack':
+                        # Check if "AEM deployment - Full Stack" stage is active or completed
+                        timeline = get_build_timeline(build_info['build_id'])
+                        full_stack_stage_active = is_stage_active_or_completed(timeline, "AEM deployment - Full Stack")
+                        
+                        if full_stack_stage_active:
+                            print("🚀 Full Stack deployment stage in progress/active - sending triggered message...")
+                            print(f"   Previous status: {last_status}")
+                            print(f"   Current status: {current_status}")
+                            print(f"   Deployment Type: {deployment_type}")
+                            print(f"   PRs in this deployment: {len(current_pr_merges)}")
+                            success = send_pipeline_status_update(current_pr_merges, build_info, build_status, "triggered", pipeline_name)
+                            if success:
+                                print("✅ Pipeline triggered message sent successfully!")
+                            else:
+                                print("❌ Failed to send pipeline triggered message")
+                            
+                            should_switch_to_phase2 = True
+                        else:
+                            print(f"⏳ Waiting for 'AEM deployment - Full Stack' stage to start before switching phases...")
                     else:
-                        print("❌ Failed to send pipeline triggered message")
-                    triggered_sent = True
-                    build_is_running = True
-                    phase2_start_time = time.time()  # Track when Phase 2 starts
-                    last_status = current_status
-                    print("🔄 Switching to Phase 2: Monitoring every 10 minutes")
+                        # For non-Full Stack or generic deployments, allow standard behavior
+                        print(f"ℹ️  Build is running (Type: {deployment_type}) - skipping started notification (only for Full Stack)")
+                        should_switch_to_phase2 = True
+                    
+                    if should_switch_to_phase2:
+                        triggered_sent = True
+                        build_is_running = True
+                        phase2_start_time = time.time()  # Track when Phase 2 starts
+                        last_status = current_status
+                        print("🔄 Switching to Phase 2: Monitoring every 10 minutes")
                 else:
-                    print(f"⏳ Waiting for build to start running... ({elapsed_minutes:.1f} minutes elapsed)")
+                    print(f"⏳ Waiting for build/stage to progress... ({elapsed_minutes:.1f} minutes elapsed)")
                     print(f"   Status: {current_status}")
                     print(f"   Triggered sent: {triggered_sent}")
                     print(f"   Build is running: {build_is_running}")
