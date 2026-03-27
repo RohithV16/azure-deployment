@@ -58,11 +58,39 @@ program
   .description('Trigger DEV pipeline deployment')
   .option('--no-notify', 'Skip Teams/Power Automate notifications')
   .option('--no-pr-detect', 'Skip PR detection')
+  .option('--branch <branchname>', 'Feature branch to deploy (optional, omit for interactive selection)')
   .action(async (options) => {
     try {
       const config = getConfig();
       const defId = config.dev_definition_id;
-      const branch = 'dev';
+      let branch = options.branch || 'dev';
+
+      // If no branch specified, show interactive selection
+      if (!options.branch) {
+        const inquirer = require('inquirer');
+        console.log(chalk.blue('🔍 Fetching branches...'));
+
+        // Get repo ID and branches
+        const repoId = await azureService.getRepositoryId(config.tag_repo_name);
+        const branches = await azureService.getBranches(repoId);
+
+        const branchChoices = branches
+          .filter(b => b.name.startsWith('refs/heads/'))
+          .map(b => b.name.replace('refs/heads/', ''))
+          .sort();
+
+        const { selectedBranch } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'selectedBranch',
+            message: 'Select a branch to deploy:',
+            choices: branchChoices,
+            pageSize: 20
+          }
+        ]);
+
+        branch = selectedBranch;
+      }
 
       console.log(chalk.blue(`🚀 Triggering DEV pipeline (ID: ${defId}, branch: ${branch})...`));
 
