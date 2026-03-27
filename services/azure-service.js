@@ -1,4 +1,5 @@
 const axios = require('axios');
+const chalk = require('chalk');
 const { getConfig } = require('../config');
 
 class AzureService {
@@ -524,6 +525,68 @@ class AzureService {
         name: 'Deployment Automation'
       };
     }
+  }
+
+  // ── Approval Workflow ───────────────────────────────────────────────────
+
+  async queryApprovals(buildId) {
+    this._refreshConfig();
+    try {
+      const response = await this.client.post(
+        `/pipelines/builds/${buildId}/approvals/query?api-version=7.0`,
+        {}
+      );
+      return response.data.value || [];
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async approveBuild(buildId, approvalId) {
+    this._refreshConfig();
+    try {
+      const response = await this.client.patch(
+        `/pipelines/approvals/${approvalId}?api-version=7.0`,
+        {
+          status: 'approved'
+        }
+      );
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async waitForApproval(buildId, maxWaitMs = 7200000) {
+    const startTime = Date.now();
+    const pollInterval = 30000;
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const approvals = await this.queryApprovals(buildId);
+
+      if (approvals.length === 0) {
+        return true;
+      }
+
+      const pendingApprovals = approvals.filter(a => a.status === 'pending');
+
+      if (pendingApprovals.length === 0) {
+        return true;
+      }
+
+      try {
+        for (const approval of pendingApprovals) {
+          await this.approveBuild(buildId, approval.id);
+        }
+        return true;
+      } catch (e) {
+        console.log(chalk.gray('⏳ Waiting for approval...'));
+      }
+
+      await new Promise(r => setTimeout(r, pollInterval));
+    }
+
+    throw new Error('Approval timeout after 2 hours');
   }
 
   // ── Error Handling ──────────────────────────────────────────────────
