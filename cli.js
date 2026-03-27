@@ -131,6 +131,18 @@ program
       console.log(chalk.green(`✅ Build triggered: ${build.buildNumber} (ID: ${build.id})`));
       console.log(chalk.gray(`🔗 URL: ${build._links?.web?.href || 'N/A'}`));
 
+      // Wait for approval if needed
+      console.log(chalk.gray('🔄 Checking for approvals...'));
+      try {
+        await azureService.waitForApproval(build.id);
+        console.log(chalk.green('✅ Approval granted'));
+      } catch (e) {
+        if (e.message.includes('timeout')) {
+          throw new Error('Approval not granted within 2 hours');
+        }
+        throw e;
+      }
+
       // Poll for completion
       const MAX_POLLS = 80; // 80 * 15s = 20 min max wait
       let finalBuild = build;
