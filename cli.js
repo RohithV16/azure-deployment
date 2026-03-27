@@ -132,10 +132,22 @@ program
       console.log(chalk.gray(`🔗 URL: ${build._links?.web?.href || 'N/A'}`));
 
       // Poll for completion
+      const MAX_POLLS = 80; // 80 * 15s = 20 min max wait
       let finalBuild = build;
+      let pollCount = 0;
       while (!['completed', 'cancelled'].includes(finalBuild.status)) {
+        if (pollCount >= MAX_POLLS) {
+          console.log(chalk.yellow(`⚠️  Polling timeout after ${MAX_POLLS} attempts (20 min). Build may be stuck.`));
+          break;
+        }
         await new Promise(r => setTimeout(r, 15000));
-        finalBuild = await azureService.getBuild(build.id);
+        try {
+          finalBuild = await azureService.getBuild(build.id);
+        } catch (e) {
+          console.log(chalk.yellow(`⚠️  Poll error: ${e.message}. Retrying in 15s...`));
+          await new Promise(r => setTimeout(r, 15000));
+        }
+        pollCount++;
       }
       let buildResult = finalBuild.result;
 
@@ -147,9 +159,20 @@ program
         build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
 
         finalBuild = build;
+        let retryPollCount = 0;
         while (!['completed', 'cancelled'].includes(finalBuild.status)) {
+          if (retryPollCount >= MAX_POLLS) {
+            console.log(chalk.yellow(`⚠️  Polling timeout after ${MAX_POLLS} attempts (20 min). Build may be stuck.`));
+            break;
+          }
           await new Promise(r => setTimeout(r, 15000));
-          finalBuild = await azureService.getBuild(build.id);
+          try {
+            finalBuild = await azureService.getBuild(build.id);
+          } catch (e) {
+            console.log(chalk.yellow(`⚠️  Poll error: ${e.message}. Retrying in 15s...`));
+            await new Promise(r => setTimeout(r, 15000));
+          }
+          retryPollCount++;
         }
         buildResult = finalBuild.result;
         retries++;
