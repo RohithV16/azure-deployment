@@ -616,6 +616,32 @@ class AzureService {
     throw new Error(`Approval timeout after ${timeoutMinutes} minutes`);
   }
 
+  // ── Permissions Check ─────────────────────────────────────────────────
+
+  async checkPermissions() {
+    this._refreshConfig();
+    try {
+      const buildResp = await this.client.get(`/build/definitions?api-version=7.0`);
+      const defs = buildResp.data.value || [];
+      
+      const config = getConfig();
+      const devId = config.dev_definition_id;
+      const stageId = config.stage_definition_id;
+      
+      const devDef = defs.find(d => d.id === parseInt(devId));
+      const stageDef = defs.find(d => d.id === parseInt(stageId));
+      
+      return {
+        hasBuildAccess: true,
+        devDefinitionExists: !!devDef,
+        stageDefinitionExists: !!stageDef,
+        definitions: defs.length
+      };
+    } catch (error) {
+      return { hasBuildAccess: false, error: error.message };
+    }
+  }
+
   // ── Error Handling ──────────────────────────────────────────────────
 
   handleError(error) {
