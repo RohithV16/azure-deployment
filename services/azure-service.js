@@ -474,6 +474,28 @@ class AzureService {
     }
   }
 
+  // ── Merged PRs ─────────────────────────────────────────────────────
+
+  async getMergedPRsSince(branch, sinceDate) {
+    this._refreshConfig();
+    const repoId = await this.getRepositoryId(this.repoName);
+    const branchName = branch.replace('refs/heads/', '');
+    try {
+      const response = await this.client.get(
+        `/git/repositories/${repoId}/pullRequests?api-version=7.0&searchCriteria.status=completed&searchCriteria.targetRefName=refs/heads/${branchName}`
+      );
+      const prs = response.data.value || [];
+      
+      if (sinceDate) {
+        const since = new Date(sinceDate);
+        return prs.filter(pr => pr.mergeDate && new Date(pr.mergeDate) > since);
+      }
+      return prs;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   // ── Work Items ──────────────────────────────────────────────────────
 
   async searchWorkItems(query, top = 20) {
