@@ -71,13 +71,22 @@ program
         console.log(chalk.blue('🔍 Fetching branches...'));
 
         // Get repo ID and branches
-        const repoId = await azureService.getRepositoryId(config.tag_repo_name);
-        const branches = await azureService.getBranches(repoId);
+        let branches;
+        try {
+          const repoId = await azureService.getRepositoryId(config.tag_repo_name);
+          branches = await azureService.getBranches(repoId);
+        } catch (fetchError) {
+          throw new Error(`Failed to fetch branches: ${fetchError.message}`);
+        }
 
         const branchChoices = branches
           .filter(b => b.name.startsWith('refs/heads/'))
           .map(b => b.name.replace('refs/heads/', ''))
           .sort();
+
+        if (branchChoices.length === 0) {
+          throw new Error('No branches found in the repository.');
+        }
 
         const { selectedBranch } = await inquirer.prompt([
           {
