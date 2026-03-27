@@ -10,6 +10,7 @@ const teamsService = require('./services/teams-service');
 const tagService = require('./services/tag-service');
 const gitService = require('./services/git-service');
 const prService = require('./services/pr-service');
+const { runHook } = require('./utils/hooks');
 
 program
   .name('mandg')
@@ -368,6 +369,15 @@ program
         }
       }
 
+      // Run pre-deploy hook
+      const hookResult = await runHook('pre-deploy', config, {
+        DEPLOY_PIPELINE: 'DEV',
+        DEPLOY_BRANCH: branch
+      });
+      if (hookResult.executed && !hookResult.success) {
+        console.log(chalk.yellow(`⚠️  Pre-deploy hook failed (exit ${hookResult.exitCode})`));
+      }
+
       // Trigger build with source branch
       let build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
       console.log(chalk.green(`✅ Build triggered: ${build.buildNumber} (ID: ${build.id})`));
@@ -449,6 +459,14 @@ program
           console.log(chalk.yellow(`   ⚠️  Notification failed: ${e.message}`));
         }
       }
+
+      // Run post-deploy hook
+      await runHook('post-deploy', config, {
+        DEPLOY_PIPELINE: 'DEV',
+        DEPLOY_BRANCH: branch,
+        DEPLOY_STATUS: buildResult || finalBuild.result,
+        DEPLOY_BUILD_ID: finalBuild.id
+      });
     } catch (error) {
       console.error(chalk.red(`❌ Error: ${error.message}`));
     }
