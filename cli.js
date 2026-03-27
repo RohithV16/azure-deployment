@@ -16,6 +16,88 @@ program
   .description('M&G AEM Azure Deployment CLI (Pure JS REST API)')
   .version('3.0.0');
 
+// ── Prerequisite Check ─────────────────────────────────────────────────
+
+program
+  .command('check')
+  .description('Validate environment, PAT, and permissions before deployment')
+  .action(async () => {
+    const { getConfig } = require('./config');
+    const azureService = require('./services/azure-service');
+    
+    console.log(chalk.blue('🔍 Running prerequisite checks...\n'));
+    
+    let allPassed = true;
+    
+    try {
+      const config = getConfig();
+      
+      if (config.org && config.project) {
+        console.log(chalk.green('✅ Config file valid'));
+        console.log(chalk.gray(`   Org: ${config.org}`));
+        console.log(chalk.gray(`   Project: ${config.project}`));
+      } else {
+        console.log(chalk.red('❌ Config incomplete'));
+        console.log(chalk.yellow('   Run: mandg update --org <url> --project <name>'));
+        allPassed = false;
+      }
+      
+      if (config.token) {
+        console.log(chalk.green('✅ PAT configured'));
+      } else if (process.env.AZURE_DEVOPS_PAT) {
+        console.log(chalk.green('✅ PAT from environment'));
+      } else {
+        console.log(chalk.red('❌ No PAT configured'));
+        console.log(chalk.yellow('   Run: mandg update --token <your-pat>'));
+        allPassed = false;
+      }
+      
+      if (config.dev_definition_id) {
+        console.log(chalk.green(`✅ DEV pipeline ID: ${config.dev_definition_id}`));
+      } else {
+        console.log(chalk.red('❌ DEV pipeline ID not configured'));
+        allPassed = false;
+      }
+      
+      if (config.stage_definition_id) {
+        console.log(chalk.green(`✅ STAGE pipeline ID: ${config.stage_definition_id}`));
+      } else {
+        console.log(chalk.red('❌ STAGE pipeline ID not configured'));
+        allPassed = false;
+      }
+      
+      if (allPassed) {
+        console.log(chalk.gray('\n   Testing Azure DevOps connection...'));
+        const perms = await azureService.checkPermissions();
+        
+        if (perms.hasBuildAccess) {
+          console.log(chalk.green('✅ Azure DevOps connection OK'));
+          console.log(chalk.green(`✅ Found ${perms.definitions} pipeline definitions`));
+          if (!perms.devDefinitionExists) {
+            console.log(chalk.yellow('⚠️  DEV pipeline definition not found'));
+          }
+          if (!perms.stageDefinitionExists) {
+            console.log(chalk.yellow('⚠️  STAGE pipeline definition not found'));
+          }
+        } else {
+          console.log(chalk.red('❌ API connection failed: ' + perms.error));
+          allPassed = false;
+        }
+      }
+    } catch (e) {
+      console.log(chalk.red('❌ Check failed: ' + e.message));
+      allPassed = false;
+    }
+    
+    console.log('');
+    if (allPassed) {
+      console.log(chalk.green('All checks passed! ✅'));
+    } else {
+      console.log(chalk.red('Some checks failed. Please fix the issues above.'));
+      process.exit(1);
+    }
+  });
+
 // ── Configuration ─────────────────────────────────────────────────────
 
 program
@@ -49,6 +131,54 @@ program
       saveConfig(newConfig);
       console.log(chalk.green('✅ Configuration updated.'));
     }
+  });
+
+// ── Secret Rotation ───────────────────────────────────────────────────
+
+program
+  .command('rotate-token')
+  .description('Rotate Azure DevOps PAT token')
+  .option('--old <token>', 'Current PAT token')
+  .option('--new <token>', 'New PAT token')
+  .action(async (options) => {
+    const { getConfig, saveConfig } = require('./config');
+    const azureService = require('./services/azure-service');
+    
+    const currentConfig = getConfig();
+    const oldToken = options.old || currentConfig.token;
+    const newToken = options.new;
+    
+    if (!oldToken) {
+      console.log(chalk.red('❌ Current token required. Use --old or ensure config has token.'));
+      process.exit(1);
+    }
+    
+    if (!newToken) {
+      console.log(chalk.red('❌ New token required. Use --new <token>'));
+      process.exit(1);
+    }
+    
+    console.log(chalk.blue('🔄 Validating new token...'));
+    
+    if (oldToken === newToken) {
+      console.log(chalk.red('❌ New token must be different from old token'));
+      process.exit(1);
+    }
+    
+    try {
+      const perms = await azureService.checkPermissions();
+      if (!perms.hasBuildAccess) {
+        console.log(chalk.red('❌ Current token is invalid: ' + perms.error));
+        process.exit(1);
+      }
+      console.log(chalk.green('✅ Current token validated'));
+    } catch (e) {
+      console.log(chalk.red('❌ Current token validation failed: ' + e.message));
+      process.exit(1);
+    }
+    
+    saveConfig({ token: newToken });
+    console.log(chalk.green('✅ Token rotated successfully!'));
   });
 
 // ── DEV Pipeline ──────────────────────────────────────────────────────
