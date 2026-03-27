@@ -127,18 +127,44 @@ program
       }
 
       // Trigger build with source branch
-      const build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
+      let build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
       console.log(chalk.green(`✅ Build triggered: ${build.buildNumber} (ID: ${build.id})`));
       console.log(chalk.gray(`🔗 URL: ${build._links?.web?.href || 'N/A'}`));
+
+      // Poll for completion
+      let finalBuild = build;
+      while (!['completed', 'cancelled'].includes(finalBuild.status)) {
+        await new Promise(r => setTimeout(r, 15000));
+        finalBuild = await azureService.getBuild(build.id);
+      }
+      let buildResult = finalBuild.result;
+
+      // Auto-retry on failure
+      let retries = 0;
+      while (buildResult === 'failed' && retries < 2) {
+        console.log(chalk.yellow(`⚠️ Build failed. Retrying in 30s... (${retries + 1}/2)`));
+        await new Promise(r => setTimeout(r, 30000));
+
+        build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
+        console.log(chalk.green(`🔄 Retrying build: ${build.buildNumber} (ID: ${build.id})`));
+
+        finalBuild = build;
+        while (!['completed', 'cancelled'].includes(finalBuild.status)) {
+          await new Promise(r => setTimeout(r, 15000));
+          finalBuild = await azureService.getBuild(build.id);
+        }
+        buildResult = finalBuild.result;
+        retries++;
+      }
 
       // Send notification
       if (options.notify) {
         try {
           await teamsService.sendDeploymentNotification({
             pipeline: 'DEV',
-            status: 'started',
-            buildNumber: build.buildNumber,
-            buildId: build.id,
+            status: buildResult === 'succeeded' ? 'succeeded' : 'failed',
+            buildNumber: finalBuild.buildNumber,
+            buildId: finalBuild.id,
             prMerges,
             org: config.org,
             project: config.project
