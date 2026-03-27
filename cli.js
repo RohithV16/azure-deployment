@@ -142,11 +142,9 @@ program
       // Auto-retry on failure
       let retries = 0;
       while (buildResult === 'failed' && retries < 2) {
-        console.log(chalk.yellow(`⚠️ Build failed. Retrying in 30s... (${retries + 1}/2)`));
         await new Promise(r => setTimeout(r, 30000));
 
         build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
-        console.log(chalk.green(`🔄 Retrying build: ${build.buildNumber} (ID: ${build.id})`));
 
         finalBuild = build;
         while (!['completed', 'cancelled'].includes(finalBuild.status)) {
