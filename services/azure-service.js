@@ -35,6 +35,16 @@ class AzureService {
 
   // ── Repository ──────────────────────────────────────────────────────
 
+  async getRepositories() {
+    this._refreshConfig();
+    try {
+      const response = await this.client.get('/git/repositories?api-version=7.0');
+      return response.data.value || [];
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   async getRepositoryId(repoName) {
     this._refreshConfig();
     const name = repoName || this.repoName;
@@ -45,6 +55,16 @@ class AzureService {
         if (repo.name === name) return repo.id;
       }
       throw new Error(`Repository '${name}' not found`);
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async getBranches(repoId) {
+    this._refreshConfig();
+    try {
+      const response = await this.client.get(`/git/repositories/${repoId}/refs?filter=heads/&api-version=7.0`);
+      return response.data.value || [];
     } catch (error) {
       this.handleError(error);
     }
