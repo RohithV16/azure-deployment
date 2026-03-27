@@ -542,7 +542,7 @@ class AzureService {
     }
   }
 
-  async approveBuild(buildId, approvalId) {
+  async approveBuild(approvalId) {
     this._refreshConfig();
     try {
       const response = await this.client.patch(
@@ -553,13 +553,14 @@ class AzureService {
       );
       return response.data;
     } catch (error) {
-      throw error;
+      this.handleError(error);
     }
   }
 
   async waitForApproval(buildId, maxWaitMs = 7200000) {
     const startTime = Date.now();
     const pollInterval = 30000;
+    const timeoutMinutes = Math.round(maxWaitMs / 60000);
 
     while (Date.now() - startTime < maxWaitMs) {
       const approvals = await this.queryApprovals(buildId);
@@ -576,17 +577,21 @@ class AzureService {
 
       try {
         for (const approval of pendingApprovals) {
-          await this.approveBuild(buildId, approval.id);
+          await this.approveBuild(approval.id);
         }
         return true;
       } catch (e) {
+        const status = e.response?.status;
+        if (status === 401 || status === 403 || status === 404) {
+          throw e;
+        }
         console.log(chalk.gray('⏳ Waiting for approval...'));
       }
 
       await new Promise(r => setTimeout(r, pollInterval));
     }
 
-    throw new Error('Approval timeout after 2 hours');
+    throw new Error(`Approval timeout after ${timeoutMinutes} minutes`);
   }
 
   // ── Error Handling ──────────────────────────────────────────────────
