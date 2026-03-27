@@ -1,140 +1,53 @@
-# 🚀 Azure Devops Python Scripts
+# M&G AEM Azure Deployment CLI (`mandg`)
 
-This Python script automates **pull request creation** in **Azure DevOps** using your local Git commits and standardized Merkle PR conventions.  
-It extracts the **Jira ticket ID** from your branch name, generates a formatted **title and description**, and can open the PR automatically in your browser.
+A terminal-only pure JavaScript CLI for managing M&G Azure DevOps deployments via REST API.
 
----
+## Installation
 
-## ⚙️ Setup (One-Time Configuration)
+1. Ensure you have Node.js (v14+) installed.
+2. Install package dependencies:
+   ```bash
+   npm install
+   ```
+3. Link the command globally:
+   ```bash
+   npm link
+   ```
 
-### 1. Get Your Azure DevOps Personal Access Token (PAT)
+## Configuration
 
-1. Go to Azure DevOps → User Settings → Personal Access Tokens
-2. Create a new token with **Code (Read & Write)** permissions
-3. Copy the token (you won't see it again!)
-
-### 2. Configure Environment Variables Permanently on Mac
-
-Open your shell configuration file:
-
-```bash
-# For zsh (default on modern macOS)
-nano ~/.zshrc
-
-# For bash (older macOS versions)
-nano ~/.bash_profile
-```
-
-Add these lines at the end of the file:
+Update your Azure DevOps Personal Access Token (PAT) and project settings. These are stored locally in your user profile (`~/.azure-deploy-aem.json`).
 
 ```bash
-# Azure DevOps Configuration
-export AZURE_DEVOPS_PAT="your_personal_access_token_here"
-export GIT_REPO_PATH="/path/to/your/local/aemaacs-life/repo"
+# Update PAT
+mandg update --token <your_pat_secret>
+
+# Update Org/Project
+mandg update --org https://dev.azure.com/your-org --project your-project
 ```
 
-Save and exit (`Ctrl + X`, then `Y`, then `Enter`)
+## Usage
 
-Apply the changes:
+### Commands
 
-```bash
-# For zsh
-source ~/.zshrc
+| Command | Description |
+|---------|-------------|
+| `mandg dev` | Triggers the DEV pipeline deployment. |
+| `mandg stage` | Triggers the STAGE pipeline deployment. |
+| `mandg status` | Checks the status of the latest build or a specific one. |
+| `mandg update` | Update configuration or authentication (PAT). |
 
-# For bash
-source ~/.bash_profile
-```
+### Command Options
 
-**Verify it worked:**
-```bash
-echo $AZURE_DEVOPS_PAT
-# Should display your token
-```
+#### `status`
+- `-d, --definition-id <id>`: Build Definition ID
+- `-b, --build-id <id>`: Specific Build ID to check
 
-### 3. Install Dependencies
+#### `update`
+- `--token <pat>`: Personal Access Token
+- `--org <url>`: Organization URL (e.g., https://dev.azure.com/org)
+- `--project <name>`: Project name
 
-```bash
-pip3 install -r requirements.txt
-```
+## Technical Details
 
-**If you get an error**, try:
-```bash
-pip3 install -r requirements.txt --break-system-packages
-```
-
----
-
-## 🚀 Usage
-
-### Create Pull Request (create_pr.py)
-
-This script **always runs in interactive mode** - it will automatically prompt you to select the target branch.
-
-```bash
-# Create PR from current branch (interactive - will prompt for target)
-python3 create_pr.py
-
-# Preview PR without creating it
-python3 create_pr.py --dry-run
-
-# Create master → dev sync PR
-python3 create_pr.py --master-to-dev
-
-# Specify custom repository path
-python3 create_pr.py --work-dir /path/to/repo
-```
-
-### Pipeline Deployment Automation
-
-Automates deployment to **DEV** (dev branch) and **STAGE** (master branch with release tagging) environments.
-
-```bash
-# Run DEV deployment workflow
-python3 deployment_dev.py
-
-# Run STAGE deployment workflow
-python3 deployment_stage.py
-```
-
-### Command Options Reference
-
-**create_pr.py:**
-| Option | Description |
-|--------|--------------|
-| `--work-dir <path>` | Manually specify the Git repository path |
-| `--dry-run` | Generate PR title and description only (no creation) |
-| `--master-to-dev` | Create master → dev PR with predefined content |
-
-**deployment_dev.py & deployment_stage.py:**
-| Option | Description |
-|--------|--------------|
-| No additional options | Simply run the script to start deployment automation |
-
----
-
-## 🧰 Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| `AZURE_DEVOPS_PAT not set` | Make sure you added `export AZURE_DEVOPS_PAT="..."` to `~/.zshrc` or `~/.bash_profile` and ran `source ~/.zshrc` |
-| Environment variables not persisting | Ensure you edited the correct file (`~/.zshrc` for zsh, `~/.bash_profile` for bash) and restarted your terminal |
-| `Could not find git repository` | Set `GIT_REPO_PATH` environment variable or use `--work-dir` option |
-| `pip: command not found` | Install pip: `python3 -m ensurepip --upgrade` |
-| `ModuleNotFoundError` | Run `pip3 install -r requirements.txt` again |
-| `Permission denied` | Use `pip3 install --user -r requirements.txt` |
-
----
-
-## 💡 Tips
-
-- Branch names should follow: `feature/ADW-XXXX-description`
-- Use `--dry-run` to preview PR content before creating
-- Interactive mode supports arrow key navigation
-- Variables in `~/.zshrc` or `~/.bash_profile` persist permanently across terminal sessions
-
----
-
-## 🦸 Authors
-
-**Rohith V & Gaurav Rahate**  
-Senior AEM Developers — Merkle
+This CLI uses the Azure DevOps REST API for all operations. It does not require the Azure CLI or Python to be installed. All authentication is handled via the Personal Access Token (PAT) you provide.

@@ -1,0 +1,29 @@
+{
+  "name": "mandg-deploy",
+  "version": "3.0.0",
+  "description": "M&G AEM Azure Deployment CLI (Pure JS REST API)",
+  "main": "cli.js",
+  "bin": {
+    "mandg": "cli.js"
+  },
+  "scripts": {
+    "start": "node cli.js"
+  },
+  "keywords": [
+    "azure",
+    "devops",
+    "deployment",
+    "aem",
+    "cli",
+    "mandg"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1",
+    "execa": "^5.1.1"
+  }
+}
