@@ -67,6 +67,7 @@ A menu will appear asking if you want to approve or reject.
 | Deploy to testing | `mandg dev` |
 | Deploy to pre-release | `mandg stage` |
 | Check deployment status | `mandg status` |
+| Watch for PR merges & auto-deploy | `mandg watch` |
 | Approve/reject deployment | `mandg approval` |
 | Create a pull request | `mandg create-pr` |
 | Check system setup | `mandg check` |
@@ -90,9 +91,14 @@ Some deployments require approval before going live. The tool handles this for y
 ### 4. **Watch Mode - Auto-Deploy**
 Want the system to automatically deploy when changes are merged?
 ```bash
+mandg watch
+# or
 mandg dev --watch
+
+# With custom settings
+mandg watch --poll-interval 5 --delay 3
 ```
-This keeps watching for new merged changes and deploys them automatically.
+This keeps watching for new merged changes and deploys them automatically (polls every 10 min, waits 5 min before deploying).
 
 ### 5. **Send Notifications**
 The tool can automatically notify your team on Microsoft Teams when deployments start, succeed, or fail.
