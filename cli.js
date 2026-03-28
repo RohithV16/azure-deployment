@@ -664,6 +664,19 @@ program
             const build = await azureService.triggerBuild(defId, 'refs/heads/dev');
             console.log(chalk.green(`🚀 Deployment triggered: ${build.buildNumber} (ID: ${build.id})`));
             
+            // Wait for approval if needed
+            console.log(chalk.gray('🔄 Checking for approvals...'));
+            try {
+              await azureService.waitForApproval(build.id);
+              console.log(chalk.green('✅ Approval granted'));
+            } catch (e) {
+              if (e.message.includes('timeout')) {
+                console.log(chalk.red('❌ Approval not granted within 2 hours - skipping deployment'));
+                continue;
+              }
+              throw e;
+            }
+            
             let finalBuild = build;
             let pollCount = 0;
             const MAX_POLLS = 80;
