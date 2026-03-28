@@ -17,6 +17,13 @@ program
   .description('M&G AEM Azure Deployment CLI (Pure JS REST API)')
   .version('3.0.0');
 
+function getAdaptivePollInterval(pollCount) {
+  const base = 5000;
+  const increment = 5000;
+  const max = 30000;
+  return Math.min(base + (pollCount * increment), max);
+}
+
 // ── Prerequisite Check ─────────────────────────────────────────────────
 
 program
@@ -277,6 +284,7 @@ program
       console.log(JSON.stringify(displayConfig, null, 2));
     } else {
       saveConfig(newConfig);
+      clearCache();
       console.log(chalk.green('✅ Configuration updated.'));
     }
   });
@@ -289,7 +297,8 @@ program
   .option('--old <token>', 'Current PAT token')
   .option('--new <token>', 'New PAT token')
   .action(async (options) => {
-    const { getConfig, saveConfig } = require('./config');
+const { getConfig, saveConfig, clearCache } = require('./config');
+const { cache } = require('./utils/cache');
     const azureService = require('./services/azure-service');
     
     const currentConfig = getConfig();
@@ -381,14 +390,15 @@ program
                 
                 let finalBuild = build;
                 let pollCount = 0;
-                const MAX_POLLS = 80;
+                const MAX_POLLS = 120;
                 
                 while (!['completed', 'cancelled'].includes(finalBuild.status)) {
                   if (pollCount >= MAX_POLLS) {
                     console.log(chalk.yellow('⚠️  Polling timeout. Build may be stuck.'));
                     break;
                   }
-                  await new Promise(r => setTimeout(r, 15000));
+                  const pollInterval = getAdaptivePollInterval(pollCount);
+                  await new Promise(r => setTimeout(r, pollInterval));
                   try {
                     finalBuild = await azureService.getBuild(build.id);
                   } catch (e) {
@@ -408,7 +418,8 @@ program
                   let retryPollCount = 0;
                   while (!['completed', 'cancelled'].includes(finalBuild.status)) {
                     if (retryPollCount >= MAX_POLLS) break;
-                    await new Promise(r => setTimeout(r, 15000));
+                    const pollInterval = getAdaptivePollInterval(retryPollCount);
+                    await new Promise(r => setTimeout(r, pollInterval));
                     try {
                       finalBuild = await azureService.getBuild(build.id);
                     } catch (e) {}
@@ -542,21 +553,22 @@ program
         throw e;
       }
 
-      // Poll for completion
-      const MAX_POLLS = 80; // 80 * 15s = 20 min max wait
+      // Poll for completion (adaptive polling)
+      const MAX_POLLS = 120;
       let finalBuild = build;
       let pollCount = 0;
       while (!['completed', 'cancelled'].includes(finalBuild.status)) {
         if (pollCount >= MAX_POLLS) {
-          console.log(chalk.yellow(`⚠️  Polling timeout after ${MAX_POLLS} attempts (20 min). Build may be stuck.`));
+          console.log(chalk.yellow(`⚠️  Polling timeout. Build may be stuck.`));
           break;
         }
-        await new Promise(r => setTimeout(r, 15000));
+        const pollInterval = getAdaptivePollInterval(pollCount);
+        await new Promise(r => setTimeout(r, pollInterval));
         try {
           finalBuild = await azureService.getBuild(build.id);
         } catch (e) {
-          console.log(chalk.yellow(`⚠️  Poll error: ${e.message}. Retrying in 15s...`));
-          await new Promise(r => setTimeout(r, 15000));
+          console.log(chalk.yellow(`⚠️  Poll error: ${e.message}. Retrying...`));
+          await new Promise(r => setTimeout(r, pollInterval));
         }
         pollCount++;
       }
@@ -573,15 +585,16 @@ program
         let retryPollCount = 0;
         while (!['completed', 'cancelled'].includes(finalBuild.status)) {
           if (retryPollCount >= MAX_POLLS) {
-            console.log(chalk.yellow(`⚠️  Polling timeout after ${MAX_POLLS} attempts (20 min). Build may be stuck.`));
+            console.log(chalk.yellow(`⚠️  Polling timeout. Build may be stuck.`));
             break;
           }
-          await new Promise(r => setTimeout(r, 15000));
+          const pollInterval = getAdaptivePollInterval(retryPollCount);
+          await new Promise(r => setTimeout(r, pollInterval));
           try {
             finalBuild = await azureService.getBuild(build.id);
           } catch (e) {
-            console.log(chalk.yellow(`⚠️  Poll error: ${e.message}. Retrying in 15s...`));
-            await new Promise(r => setTimeout(r, 15000));
+            console.log(chalk.yellow(`⚠️  Poll error: ${e.message}. Retrying...`));
+            await new Promise(r => setTimeout(r, pollInterval));
           }
           retryPollCount++;
         }
@@ -679,14 +692,15 @@ program
             
             let finalBuild = build;
             let pollCount = 0;
-            const MAX_POLLS = 80;
+            const MAX_POLLS = 120;
             
             while (!['completed', 'cancelled'].includes(finalBuild.status)) {
               if (pollCount >= MAX_POLLS) {
                 console.log(chalk.yellow('⚠️  Polling timeout. Build may be stuck.'));
                 break;
               }
-              await new Promise(r => setTimeout(r, 15000));
+              const pollInterval = getAdaptivePollInterval(pollCount);
+              await new Promise(r => setTimeout(r, pollInterval));
               try {
                 finalBuild = await azureService.getBuild(build.id);
               } catch (e) {
@@ -706,7 +720,8 @@ program
               let retryPollCount = 0;
               while (!['completed', 'cancelled'].includes(finalBuild.status)) {
                 if (retryPollCount >= MAX_POLLS) break;
-                await new Promise(r => setTimeout(r, 15000));
+                const pollInterval = getAdaptivePollInterval(retryPollCount);
+                await new Promise(r => setTimeout(r, pollInterval));
                 try {
                   finalBuild = await azureService.getBuild(build.id);
                 } catch (e) {}

@@ -4,6 +4,9 @@ const os = require('os');
 
 const CONFIG_PATH = path.join(os.homedir(), '.azure-deploy-aem.json');
 
+let cachedConfig = null;
+let configLoaded = false;
+
 const DEFAULT_CONFIG = {
   org: 'https://mpcoderepo.visualstudio.com',
   project: 'DigitalExperience',
@@ -15,27 +18,44 @@ const DEFAULT_CONFIG = {
   power_automate_webhook_url: 'https://default6e8992ec76d54ea58eaeb0c5e55874.9a.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/1c9b143d398747a6892388f31a230f87/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=tzPM2LVcleQ3UCpAWZG46rQ7-3W5qtXOgrTjAHHYIcw'
 };
 
-function getConfig() {
+function getConfig(forceRefresh = false) {
+  if (configLoaded && !forceRefresh && cachedConfig) {
+    return cachedConfig;
+  }
+  
+  let config;
   if (fs.existsSync(CONFIG_PATH)) {
     try {
       const data = fs.readFileSync(CONFIG_PATH, 'utf8');
-      return { ...DEFAULT_CONFIG, ...JSON.parse(data) };
+      config = { ...DEFAULT_CONFIG, ...JSON.parse(data) };
     } catch (e) {
-      return DEFAULT_CONFIG;
+      config = DEFAULT_CONFIG;
     }
+  } else {
+    config = DEFAULT_CONFIG;
   }
-  return DEFAULT_CONFIG;
+  
+  cachedConfig = config;
+  configLoaded = true;
+  return config;
 }
 
 function saveConfig(newConfig) {
-  const currentConfig = getConfig();
+  const currentConfig = getConfig(true);
   const updatedConfig = { ...currentConfig, ...newConfig };
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(updatedConfig, null, 2));
+  cachedConfig = updatedConfig;
   return updatedConfig;
+}
+
+function clearCache() {
+  cachedConfig = null;
+  configLoaded = false;
 }
 
 module.exports = {
   getConfig,
   saveConfig,
+  clearCache,
   CONFIG_PATH
 };

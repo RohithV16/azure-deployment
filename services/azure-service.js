@@ -1,13 +1,14 @@
 const axios = require('axios');
 const chalk = require('chalk');
 const { getConfig } = require('../config');
+const { cache, CACHE_KEYS, TTL } = require('../utils/cache');
 
 class AzureService {
   constructor() {
-    this._init();
+    this._initClient();
   }
 
-  _init() {
+  _initClient() {
     const config = getConfig();
     this.org = config.org;
     this.project = config.project;
@@ -30,14 +31,21 @@ class AzureService {
     });
   }
 
-  _refreshConfig() {
-    this._init();
+  refreshConfig() {
+    this._initClient();
+    cache.clear();
+  }
+
+  getAdaptivePollInterval(pollCount) {
+    const base = 5000;
+    const increment = 5000;
+    const max = 30000;
+    return Math.min(base + (pollCount * increment), max);
   }
 
   // ── Repository ──────────────────────────────────────────────────────
 
   async getRepositories() {
-    this._refreshConfig();
     try {
       const response = await this.client.get('/git/repositories?api-version=7.0');
       return response.data.value || [];
@@ -47,13 +55,20 @@ class AzureService {
   }
 
   async getRepositoryId(repoName) {
-    this._refreshConfig();
     const name = repoName || this.repoName;
+    const cacheKey = CACHE_KEYS.REPO_ID(name);
+    
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+    
     try {
       const response = await this.client.get('/git/repositories?api-version=7.0');
       const repos = response.data.value || [];
       for (const repo of repos) {
-        if (repo.name === name) return repo.id;
+        if (repo.name === name) {
+          cache.set(cacheKey, repo.id, TTL.REPO_ID);
+          return repo.id;
+        }
       }
       throw new Error(`Repository '${name}' not found`);
     } catch (error) {
@@ -62,10 +77,16 @@ class AzureService {
   }
 
   async getBranches(repoId) {
-    this._refreshConfig();
+    const cacheKey = CACHE_KEYS.BRANCHES(repoId);
+    
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+    
     try {
       const response = await this.client.get(`/git/repositories/${repoId}/refs?filter=heads/&api-version=7.0`);
-      return response.data.value || [];
+      const branches = response.data.value || [];
+      cache.set(cacheKey, branches, TTL.BRANCHES);
+      return branches;
     } catch (error) {
       this.handleError(error);
     }
@@ -74,7 +95,6 @@ class AzureService {
   // ── Builds ──────────────────────────────────────────────────────────
 
   async triggerBuild(definitionId, sourceRef) {
-    this._refreshConfig();
     const payload = {
       definition: { id: parseInt(definitionId) }
     };
@@ -92,7 +112,6 @@ class AzureService {
   }
 
   async getBuild(buildId) {
-    this._refreshConfig();
     try {
       const response = await this.client.get(`/build/builds/${buildId}?api-version=7.0`);
       return response.data;
@@ -102,11 +121,10 @@ class AzureService {
   }
 
   async getLatestBuilds(definitionId, top = 1, requireFullstack = false) {
-    this._refreshConfig();
-    const fetchCount = requireFullstack ? 200 : Math.max(top, 10);
+    const fetchCount = requireFullstack ? 50 : Math.max(top, 10);
     try {
       const response = await this.client.get(
-        `/build/builds?definitions=${definitionId}&$top=${fetchCount}&api-version=7.0`
+        `/build/builds?definitions=${definitionId}&$top=${fetchCount}&$orderby=startTime desc&api-version=7.0`
       );
       const builds = response.data.value || [];
 
@@ -127,10 +145,9 @@ class AzureService {
   }
 
   async getLastBuildInfo(definitionId, { includeInProgress = false, requireFullstack = false } = {}) {
-    this._refreshConfig();
     try {
       const response = await this.client.get(
-        `/build/builds?definitions=${definitionId}&$top=200&api-version=7.0`
+        `/build/builds?definitions=${definitionId}&$top=50&$orderby=startTime desc&api-version=7.0`
       );
       const builds = response.data.value || [];
 
@@ -188,7 +205,6 @@ class AzureService {
   }
 
   async getBuildTimeline(buildId) {
-    this._refreshConfig();
     try {
       const response = await this.client.get(`/build/builds/${buildId}/timeline?api-version=7.0`);
       return response.data;
@@ -200,8 +216,12 @@ class AzureService {
   // ── Tags ────────────────────────────────────────────────────────────
 
   async getLatestTag(repoName) {
-    this._refreshConfig();
     const repoId = await this.getRepositoryId(repoName);
+    const cacheKey = CACHE_KEYS.TAGS(repoName || this.repoName);
+    
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+    
     try {
       const response = await this.client.get(
         `/git/repositories/${repoId}/refs?filter=tags&api-version=7.0`
@@ -221,14 +241,15 @@ class AzureService {
         return 0;
       });
 
-      return tags[tags.length - 1];
+      const latestTag = tags[tags.length - 1];
+      cache.set(cacheKey, latestTag, TTL.TAGS);
+      return latestTag;
     } catch (error) {
       this.handleError(error);
     }
   }
 
   async getCommitFromTag(tagName, repoName) {
-    this._refreshConfig();
     const repoId = await this.getRepositoryId(repoName);
     try {
       const response = await this.client.get(
@@ -264,8 +285,8 @@ class AzureService {
   }
 
   async createTag(tagName, commitHash, description, repoName) {
-    this._refreshConfig();
     const repoId = await this.getRepositoryId(repoName);
+    cache.delete(CACHE_KEYS.TAGS(repoName || this.repoName));
 
     // Resolve commit object ID
     let commitObjectId;
@@ -319,7 +340,6 @@ class AzureService {
   // ── Commits ─────────────────────────────────────────────────────────
 
   async getLatestCommitFromBranch(branch, repoName) {
-    this._refreshConfig();
     const repoId = await this.getRepositoryId(repoName);
     const branchName = branch.replace('refs/heads/', '');
     try {
@@ -339,7 +359,6 @@ class AzureService {
   }
 
   async getCommit(commitHash, repoName) {
-    this._refreshConfig();
     const repoId = await this.getRepositoryId(repoName);
     try {
       const response = await this.client.get(
@@ -354,7 +373,6 @@ class AzureService {
   // ── PR Merges ───────────────────────────────────────────────────────
 
   async getPrMergesAfterCommit(commitHash, branch) {
-    this._refreshConfig();
     const repoId = await this.getRepositoryId();
     const branchName = branch.replace('refs/heads/', '');
 
@@ -433,7 +451,6 @@ class AzureService {
   // ── Pull Requests ───────────────────────────────────────────────────
 
   async checkExistingPr(repoId, sourceBranch, targetBranch) {
-    this._refreshConfig();
     const srcRef = sourceBranch.startsWith('refs/heads/') ? sourceBranch : `refs/heads/${sourceBranch}`;
     const tgtRef = targetBranch.startsWith('refs/heads/') ? targetBranch : `refs/heads/${targetBranch}`;
     try {
@@ -448,7 +465,6 @@ class AzureService {
   }
 
   async createPullRequest(repoId, sourceBranch, targetBranch, title, description) {
-    this._refreshConfig();
     const srcRef = sourceBranch.startsWith('refs/heads/') ? sourceBranch : `refs/heads/${sourceBranch}`;
     const tgtRef = targetBranch.startsWith('refs/heads/') ? targetBranch : `refs/heads/${targetBranch}`;
 
@@ -477,7 +493,6 @@ class AzureService {
   // ── Merged PRs ─────────────────────────────────────────────────────
 
   async getMergedPRsSince(branch, sinceDate) {
-    this._refreshConfig();
     const repoId = await this.getRepositoryId(this.repoName);
     const branchName = branch.replace('refs/heads/', '');
     try {
@@ -499,7 +514,6 @@ class AzureService {
   // ── Work Items ──────────────────────────────────────────────────────
 
   async searchWorkItems(query, top = 20) {
-    this._refreshConfig();
     try {
       const wiqlResp = await this.client.post('/wit/wiql?api-version=7.0', {
         query: `SELECT [System.Id], [System.Title] FROM WorkItems WHERE [System.TeamProject] = '${this.project}' AND ([System.Id] CONTAINS '${query}' OR [System.Title] CONTAINS '${query}') ORDER BY [System.ChangedDate] DESC`
@@ -529,16 +543,20 @@ class AzureService {
   // ── Profile ─────────────────────────────────────────────────────────
 
   async getCurrentUser() {
-    this._refreshConfig();
+    const cached = cache.get(CACHE_KEYS.USER_PROFILE);
+    if (cached) return cached;
+    
     try {
       const profileUrl = `${this.org}/_apis/profile/profiles/me?api-version=7.0`;
       const response = await axios.get(profileUrl, { headers: this.headers });
-      return {
+      const user = {
         id: response.data.id,
         displayName: response.data.displayName,
         emailAddress: response.data.emailAddress || '',
         name: response.data.displayName || 'Unknown User'
       };
+      cache.set(CACHE_KEYS.USER_PROFILE, user, TTL.USER_PROFILE);
+      return user;
     } catch (_) {
       return {
         id: 'unknown',
@@ -552,7 +570,6 @@ class AzureService {
   // ── Approval Workflow ───────────────────────────────────────────────────
 
   async queryApprovals(buildId) {
-    this._refreshConfig();
     try {
       const response = await this.client.post(
         `/pipelines/builds/${buildId}/approvals/query?api-version=7.0`,
@@ -565,7 +582,6 @@ class AzureService {
   }
 
   async approveBuild(approvalId) {
-    this._refreshConfig();
     try {
       const response = await this.client.patch(
         `/pipelines/approvals/${approvalId}?api-version=7.0`,
@@ -619,10 +635,25 @@ class AzureService {
   // ── Permissions Check ─────────────────────────────────────────────────
 
   async checkPermissions() {
-    this._refreshConfig();
+    const cachedDefs = cache.get(CACHE_KEYS.PIPELINE_DEFS);
+    if (cachedDefs) {
+      const config = getConfig();
+      const devId = config.dev_definition_id;
+      const stageId = config.stage_definition_id;
+      const devDef = cachedDefs.find(d => d.id === parseInt(devId));
+      const stageDef = cachedDefs.find(d => d.id === parseInt(stageId));
+      return {
+        hasBuildAccess: true,
+        devDefinitionExists: !!devDef,
+        stageDefinitionExists: !!stageDef,
+        definitions: cachedDefs.length
+      };
+    }
+    
     try {
       const buildResp = await this.client.get(`/build/definitions?api-version=7.0`);
       const defs = buildResp.data.value || [];
+      cache.set(CACHE_KEYS.PIPELINE_DEFS, defs, TTL.PIPELINE_DEFS);
       
       const config = getConfig();
       const devId = config.dev_definition_id;
@@ -645,7 +676,6 @@ class AzureService {
   // ── Approval Management ─────────────────────────────────────────────────
 
   async getPendingApprovals() {
-    this._refreshConfig();
     try {
       const response = await this.client.post(
         '/pipelines/approvals/query?api-version=7.0',
@@ -659,7 +689,6 @@ class AzureService {
   }
 
   async approveDeployment(approvalId, comment = '') {
-    this._refreshConfig();
     try {
       const response = await this.client.patch(
         `/pipelines/approvals/${approvalId}?api-version=7.0`,
@@ -675,7 +704,6 @@ class AzureService {
   }
 
   async rejectDeployment(approvalId, comment = '') {
-    this._refreshConfig();
     try {
       const response = await this.client.patch(
         `/pipelines/approvals/${approvalId}?api-version=7.0`,
