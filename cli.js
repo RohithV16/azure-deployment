@@ -99,6 +99,133 @@ program
     }
   });
 
+// ── Approval Management ───────────────────────────────────────────────
+
+program
+  .command('approval')
+  .description('Interactive approval/rejection of pending deployments')
+  .action(async () => {
+    const inquirer = require('inquirer');
+    
+    console.log(chalk.blue('📋 Fetching pending approvals...'));
+    
+    const approvals = await azureService.getPendingApprovals();
+    
+    if (approvals.length === 0) {
+      console.log(chalk.yellow('⚠️  No pending approvals found.'));
+      return;
+    }
+    
+    const choices = approvals.map((a, i) => ({
+      name: `${i + 1}. ${a.pipeline?.name || 'Pipeline'} | Build #${a.build?.id || '?'} | ${a.status} | by ${a.approver?.displayName || 'unknown'}`,
+      value: a
+    }));
+    
+    const { selectedApproval } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'selectedApproval',
+        message: 'Select a deployment:',
+        choices: choices,
+        pageSize: 20
+      }
+    ]);
+    
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: 'Choose action:',
+        choices: [
+          { name: '[A]pprove', value: 'approve' },
+          { name: '[R]eject', value: 'reject' }
+        ]
+      }
+    ]);
+    
+    const { comment } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'comment',
+        message: 'Add comment (optional):'
+      }
+    ]);
+    
+    if (action === 'approve') {
+      await azureService.approveDeployment(selectedApproval.id, comment);
+      console.log(chalk.green(`✅ Approved Build #${selectedApproval.build?.id}`));
+    } else {
+      await azureService.rejectDeployment(selectedApproval.id, comment);
+      console.log(chalk.red(`❌ Rejected Build #${selectedApproval.build?.id}`));
+    }
+  });
+
+program
+  .command('approve')
+  .description('Approve a specific deployment')
+  .option('--build <id>', 'Build ID')
+  .option('--comment <text>', 'Approval comment')
+  .action(async (options) => {
+    if (!options.build) {
+      console.log(chalk.red('❌ Build ID required. Use --build <id>'));
+      console.log(chalk.gray('Or use "mandg approval" for interactive mode'));
+      process.exit(1);
+    }
+    
+    const approvals = await azureService.getPendingApprovals();
+    const approval = approvals.find(a => a.build?.id === parseInt(options.build));
+    
+    if (!approval) {
+      console.log(chalk.red(`❌ No pending approval found for Build #${options.build}`));
+      process.exit(1);
+    }
+    
+    await azureService.approveDeployment(approval.id, options.comment);
+    console.log(chalk.green(`✅ Approved Build #${options.build}`));
+  });
+
+program
+  .command('reject')
+  .description('Reject a specific deployment')
+  .option('--build <id>', 'Build ID')
+  .option('--comment <text>', 'Rejection reason')
+  .action(async (options) => {
+    if (!options.build) {
+      console.log(chalk.red('❌ Build ID required. Use --build <id>'));
+      console.log(chalk.gray('Or use "mandg approval" for interactive mode'));
+      process.exit(1);
+    }
+    
+    const approvals = await azureService.getPendingApprovals();
+    const approval = approvals.find(a => a.build?.id === parseInt(options.build));
+    
+    if (!approval) {
+      console.log(chalk.red(`❌ No pending approval found for Build #${options.build}`));
+      process.exit(1);
+    }
+    
+    await azureService.rejectDeployment(approval.id, options.comment);
+    console.log(chalk.red(`❌ Rejected Build #${options.build}`));
+  });
+
+program
+  .command('approvals')
+  .description('List pending approvals')
+  .option('--list', 'List all pending approvals')
+  .action(async (options) => {
+    const approvals = await azureService.getPendingApprovals();
+    
+    if (approvals.length === 0) {
+      console.log(chalk.yellow('⚠️  No pending approvals.'));
+      return;
+    }
+    
+    console.log(chalk.blue('📋 Pending Approvals:\n'));
+    approvals.forEach((a, i) => {
+      console.log(`${i + 1}. Build #${a.build?.id} | ${a.pipeline?.name || 'Pipeline'} | by ${a.approver?.displayName || 'unknown'}`);
+    });
+  });
+
 // ── Configuration ─────────────────────────────────────────────────────
 
 program

@@ -642,6 +642,54 @@ class AzureService {
     }
   }
 
+  // ── Approval Management ─────────────────────────────────────────────────
+
+  async getPendingApprovals() {
+    this._refreshConfig();
+    try {
+      const response = await this.client.post(
+        '/pipelines/approvals/query?api-version=7.0',
+        { queryOrder: 'queueTimeDescending' }
+      );
+      const approvals = response.data.value || [];
+      return approvals.filter(a => a.status === 'pending');
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async approveDeployment(approvalId, comment = '') {
+    this._refreshConfig();
+    try {
+      const response = await this.client.patch(
+        `/pipelines/approvals/${approvalId}?api-version=7.0`,
+        {
+          status: 'approved',
+          comment: comment
+        }
+      );
+      return response.data;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  async rejectDeployment(approvalId, comment = '') {
+    this._refreshConfig();
+    try {
+      const response = await this.client.patch(
+        `/pipelines/approvals/${approvalId}?api-version=7.0`,
+        {
+          status: 'rejected',
+          comment: comment
+        }
+      );
+      return response.data;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
   // ── Error Handling ──────────────────────────────────────────────────
 
   handleError(error) {
