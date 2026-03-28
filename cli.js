@@ -619,6 +619,125 @@ program
     }
   });
 
+// ── Watch Mode ───────────────────────────────────────────────────────
+
+program
+  .command('watch')
+  .description('Watch for PR merges and auto-deploy to DEV')
+  .option('--poll-interval <minutes>', 'Poll interval in minutes (default: 10)', '10')
+  .option('--delay <minutes>', 'Delay after PR merge before deploy (default: 5)', '5')
+  .option('--no-notify', 'Skip notifications')
+  .action(async (options) => {
+    const config = getConfig();
+    const azureService = require('./services/azure-service');
+    const teamsService = require('./services/teams-service');
+    const { getState, saveState } = require('./utils/watch-state');
+    
+    const defId = config.dev_definition_id;
+    const pollIntervalMs = parseInt(options.pollInterval) * 60 * 1000;
+    const delayMinutes = parseInt(options.delay);
+    const isWatchMode = true;
+    
+    console.log(chalk.blue('🔄 Starting watch mode...'));
+    console.log(chalk.gray(`   Poll interval: ${options.pollInterval} min`));
+    console.log(chalk.gray(`   Delay after merge: ${options.delay} min`));
+    console.log(chalk.yellow('   Press Ctrl+C to stop\n'));
+    
+    while (true) {
+      let state = getState();
+      
+      try {
+        const prs = await azureService.getMergedPRsSince('dev', state.lastPrMergeTime);
+        
+        if (prs && prs.length > 0) {
+          prs.sort((a, b) => new Date(b.mergeDate) - new Date(a.mergeDate));
+          
+          for (const pr of prs) {
+            console.log(chalk.cyan(`📋 New PR merged: #${pr.pullRequestId} - ${pr.title}`));
+            
+            console.log(chalk.gray(`   Waiting ${delayMinutes} minute(s) before deploy...`));
+            for (let i = delayMinutes; i > 0; i--) {
+              await new Promise(r => setTimeout(r, 60000));
+              if (i > 1) console.log(chalk.gray(`   ${i - 1} minute(s) remaining...`));
+            }
+            
+            const build = await azureService.triggerBuild(defId, 'refs/heads/dev');
+            console.log(chalk.green(`🚀 Deployment triggered: ${build.buildNumber} (ID: ${build.id})`));
+            
+            let finalBuild = build;
+            let pollCount = 0;
+            const MAX_POLLS = 80;
+            
+            while (!['completed', 'cancelled'].includes(finalBuild.status)) {
+              if (pollCount >= MAX_POLLS) {
+                console.log(chalk.yellow('⚠️  Polling timeout. Build may be stuck.'));
+                break;
+              }
+              await new Promise(r => setTimeout(r, 15000));
+              try {
+                finalBuild = await azureService.getBuild(build.id);
+              } catch (e) {
+                console.log(chalk.yellow(`⚠️  Poll error: ${e.message}`));
+              }
+              pollCount++;
+            }
+            
+            let buildResult = finalBuild.result;
+            
+            let retries = 0;
+            while (buildResult === 'failed' && retries < 2) {
+              await new Promise(r => setTimeout(r, 30000));
+              build = await azureService.triggerBuild(defId, 'refs/heads/dev');
+              finalBuild = build;
+              
+              let retryPollCount = 0;
+              while (!['completed', 'cancelled'].includes(finalBuild.status)) {
+                if (retryPollCount >= MAX_POLLS) break;
+                await new Promise(r => setTimeout(r, 15000));
+                try {
+                  finalBuild = await azureService.getBuild(build.id);
+                } catch (e) {}
+                retryPollCount++;
+              }
+              buildResult = finalBuild.result;
+              retries++;
+            }
+            
+            if (options.notify !== false) {
+              await teamsService.sendDeploymentNotification({
+                pipeline: 'DEV',
+                status: buildResult === 'succeeded' ? 'succeeded' : 'failed',
+                buildNumber: finalBuild.buildNumber,
+                buildId: finalBuild.id,
+                prMerges: [],
+                org: config.org,
+                project: config.project
+              });
+            }
+            
+            if (buildResult === 'succeeded') {
+              console.log(chalk.green('✅ Deployment succeeded!'));
+            } else {
+              console.log(chalk.red('❌ Deployment failed after retries'));
+            }
+            
+            state.lastPrId = pr.pullRequestId;
+            state.lastPrMergeTime = pr.mergeDate;
+            state.lastDeployTime = new Date().toISOString();
+            saveState(state);
+          }
+        } else {
+          console.log(chalk.gray('🔍 No new PRs found'));
+        }
+      } catch (e) {
+        console.log(chalk.yellow(`⚠️  Error: ${e.message}`));
+      }
+      
+      console.log(chalk.gray(`   Next check in ${options.pollInterval} minute(s)...\n`));
+      await new Promise(r => setTimeout(r, pollIntervalMs));
+    }
+  });
+
 // ── STAGE Pipeline ────────────────────────────────────────────────────
 
 program
