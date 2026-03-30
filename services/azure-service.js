@@ -12,7 +12,7 @@ class AzureService {
     const config = getConfig();
     this.org = config.org;
     this.project = config.project;
-    this.token = config.token;
+    this.token = config.token || process.env.AZURE_DEVOPS_PAT;
     this.repoName = config.tag_repo_name || 'aemaacs-life';
 
     if (this.token) {
@@ -94,13 +94,17 @@ class AzureService {
 
   // ── Builds ──────────────────────────────────────────────────────────
 
-  async triggerBuild(definitionId, sourceRef) {
+  async triggerBuild(definitionId, sourceRef, templateParameters = {}) {
     const payload = {
       definition: { id: parseInt(definitionId) }
     };
 
     if (sourceRef) {
       payload.sourceBranch = sourceRef;
+    }
+
+    if (Object.keys(templateParameters).length > 0) {
+      payload.templateParameters = templateParameters;
     }
 
     try {
@@ -571,23 +575,25 @@ class AzureService {
 
   async queryApprovals(buildId) {
     try {
-      const response = await this.client.post(
-        `/pipelines/builds/${buildId}/approvals/query?api-version=7.0`,
-        {}
+      const response = await this.client.get(
+        `/pipelines/approvals?api-version=7.0`
       );
-      return response.data.value || [];
+      const allApprovals = response.data.value || [];
+      return allApprovals.filter(a => a.pipeline?.owner?.id === parseInt(buildId));
     } catch (error) {
       this.handleError(error);
     }
   }
 
-  async approveBuild(approvalId) {
+  async approveBuild(approvalId, comment = '') {
     try {
       const response = await this.client.patch(
-        `/pipelines/approvals/${approvalId}?api-version=7.0`,
-        {
-          status: 'approved'
-        }
+        `/pipelines/approvals?api-version=7.0`,
+        [{
+          approvalId: approvalId,
+          status: 'approved',
+          comment: comment
+        }]
       );
       return response.data;
     } catch (error) {
@@ -706,11 +712,12 @@ class AzureService {
   async rejectDeployment(approvalId, comment = '') {
     try {
       const response = await this.client.patch(
-        `/pipelines/approvals/${approvalId}?api-version=7.0`,
-        {
+        `/pipelines/approvals?api-version=7.0`,
+        [{
+          approvalId: approvalId,
           status: 'rejected',
           comment: comment
-        }
+        }]
       );
       return response.data;
     } catch (error) {

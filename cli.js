@@ -385,7 +385,7 @@ program
                   if (i > 1) console.log(chalk.gray(`   ${i - 1} minute(s) remaining...`));
                 }
                 
-                const build = await azureService.triggerBuild(defId, 'refs/heads/dev');
+                const build = await azureService.triggerBuild(defId, 'refs/heads/dev', { deploymentType: 'Full Stack' });
                 console.log(chalk.green(`🚀 Deployment triggered: ${build.buildNumber} (ID: ${build.id})`));
                 
                 let finalBuild = build;
@@ -412,7 +412,7 @@ program
                 let retries = 0;
                 while (buildResult === 'failed' && retries < 2) {
                   await new Promise(r => setTimeout(r, 30000));
-                  build = await azureService.triggerBuild(defId, 'refs/heads/dev');
+                  build = await azureService.triggerBuild(defId, 'refs/heads/dev', { deploymentType: 'Full Stack' });
                   finalBuild = build;
                   
                   let retryPollCount = 0;
@@ -537,7 +537,7 @@ program
       }
 
       // Trigger build with source branch
-      let build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
+      let build = await azureService.triggerBuild(defId, `refs/heads/${branch}`, { deploymentType: 'Full Stack' });
       console.log(chalk.green(`✅ Build triggered: ${build.buildNumber} (ID: ${build.id})`));
       console.log(chalk.gray(`🔗 URL: ${build._links?.web?.href || 'N/A'}`));
 
@@ -579,7 +579,7 @@ program
       while (buildResult === 'failed' && retries < 2) {
         await new Promise(r => setTimeout(r, 30000));
 
-        build = await azureService.triggerBuild(defId, `refs/heads/${branch}`);
+        build = await azureService.triggerBuild(defId, `refs/heads/${branch}`, { deploymentType: 'Full Stack' });
 
         finalBuild = build;
         let retryPollCount = 0;
@@ -674,7 +674,7 @@ program
               if (i > 1) console.log(chalk.gray(`   ${i - 1} minute(s) remaining...`));
             }
             
-            const build = await azureService.triggerBuild(defId, 'refs/heads/dev');
+            const build = await azureService.triggerBuild(defId, 'refs/heads/dev', { deploymentType: 'Full Stack' });
             console.log(chalk.green(`🚀 Deployment triggered: ${build.buildNumber} (ID: ${build.id})`));
             
             // Wait for approval if needed
@@ -714,7 +714,7 @@ program
             let retries = 0;
             while (buildResult === 'failed' && retries < 2) {
               await new Promise(r => setTimeout(r, 30000));
-              build = await azureService.triggerBuild(defId, 'refs/heads/dev');
+              build = await azureService.triggerBuild(defId, 'refs/heads/dev', { deploymentType: 'Full Stack' });
               finalBuild = build;
               
               let retryPollCount = 0;
@@ -825,7 +825,7 @@ program
       console.log(chalk.gray(`   Source: ${sourceRef}`));
 
       // Trigger build
-      const build = await azureService.triggerBuild(defId, sourceRef);
+      const build = await azureService.triggerBuild(defId, sourceRef, { deploymentType: 'Full Stack' });
       console.log(chalk.green(`✅ Build triggered: ${build.buildNumber} (ID: ${build.id})`));
       console.log(chalk.gray(`🔗 URL: ${build._links?.web?.href || 'N/A'}`));
 
