@@ -89,10 +89,13 @@ python3 create_pr.py --work-dir /path/to/repo
 Automates deployment to **DEV** (dev branch) and **STAGE** (master branch with release tagging) environments.
 
 ```bash
-# Run DEV deployment workflow
+# Run DEV deployment workflow (default 'dev' branch)
 python3 deployment_dev.py
 
-# Run STAGE deployment workflow
+# Run DEV deployment for a custom branch
+python3 deployment_dev.py --branch feature/ADW-XXXX
+
+# Run STAGE deployment workflow (always 'master' branch)
 python3 deployment_stage.py
 ```
 
@@ -108,7 +111,8 @@ python3 deployment_stage.py
 **deployment_dev.py & deployment_stage.py:**
 | Option | Description |
 |--------|--------------|
-| No additional options | Simply run the script to start deployment automation |
+| `--branch <name>` | (DEV only) Specify a custom source branch for deployment |
+| No additional options | Simply run the script to start deployment automation with default branches |
 
 ---
 

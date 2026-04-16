@@ -10,6 +10,9 @@ prompt-toolkit>=3.0.52
 # Terminal background detection for theme support
 term-background>=1.0.5
 
+# Playwright for browser automation (check_unintended_domains.py)
+playwright>=1.40.0
+
 # Note: The following modules are part of Python's standard library
 # and do not need to be installed:
 # - json

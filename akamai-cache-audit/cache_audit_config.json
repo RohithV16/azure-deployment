@@ -1,0 +1,14 @@
+{
+  "url": "https://www-stage.mandg.com/adviser/tech-matters",
+  "duration_seconds": 400,
+  "interval_seconds": 5,
+  "timeout_seconds": 20,
+  "headers": {
+    "X-Akamai-Debug": "true"
+  },
+  "expected": {
+    "akamai_cache_status": "Hit from child",
+    "cache_control": "max-age=300,s-maxage=300",
+    "akamai_grn_required": true
+  }
+}

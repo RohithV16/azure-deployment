@@ -2090,9 +2090,18 @@ def generate_deployment_message(build_info, pr_merges, new_build_info=None):
         print()
         print("="*60)
     else:
-        print("🚀 DEPLOYMENT TO DEV TRIGGERED")
-        print("="*60)
-        print("The following merged PRs have been getting deployed to the development environment:")
+        # Check if this is a custom branch deployment
+        is_custom = pr_merges and pr_merges[0].get('jira_ticket') == 'CUSTOM'
+        
+        if is_custom:
+            print("🚀 CUSTOM BRANCH DEPLOYMENT TRIGGERED")
+            print("="*60)
+            print("A manual deployment has been triggered for a custom branch:")
+        else:
+            print("🚀 DEPLOYMENT TO DEV TRIGGERED")
+            print("="*60)
+            print("The following merged PRs have been getting deployed to the development environment:")
+        
         print()
         
         for pr in pr_merges:
@@ -2122,13 +2131,13 @@ def generate_deployment_message(build_info, pr_merges, new_build_info=None):
     if new_build_info:
         print(f"   New Build Triggered: {new_build_info['build_number']} (ID: {new_build_info['build_id']})")
 
-def main_deployment_workflow():
+def main_deployment_workflow(custom_branch=None):
     """Main deployment workflow for DEV pipeline - fetches build info, triggers build, sends messages"""
     print("=== DEV Pipeline Deployment Automation ===")
     
     # DEV pipeline configuration
     def_id = BUILD_DEFINITION_ID  # Always 3274 for DEV
-    branch = BRANCH  # Always "dev" for DEV
+    branch = custom_branch or BRANCH  # Use custom branch if provided, otherwise default to "dev"
     pipeline_name = "DEV"
     
     print(f"Using Pipeline: {pipeline_name} (Definition ID: {def_id})")
@@ -2138,136 +2147,166 @@ def main_deployment_workflow():
     print("Fetching last build information and PR merges...")
     print()
     
-    # Get the last successful/completed build to use as baseline
-    print("🔍 Checking for last successful build...")
-    build_info = get_last_build_info(def_id, include_in_progress=False)
-    
-    if not build_info:
-        print("❌ Failed to get build information")
-        sys.exit(1)
-    
-    print(f"✅ Using last successful build: {build_info['build_number']} (ID: {build_info['build_id']})")
-    print(f"   Status: {build_info.get('status', 'completed')}")
-    print(f"   Result: {build_info.get('result', 'N/A')}")
-    print()
-    
-    # For DEV pipeline: Find the commit on 'dev' branch that matches the build's deployment time
-    # This ensures we use the actual deployed commit, not just the build's source commit
-    baseline_commit = build_info['source_version']  # Default: commit from last successful build
-    
-    print(f"🔍 Finding baseline commit on '{branch}' branch...")
-    print(f"   Build commit: {baseline_commit[:8]}")
-    
-    # First verify if the build commit exists on dev branch
-    print(f"   Verifying if build commit {baseline_commit[:8]} exists on '{branch}' branch...")
-    commit_exists = verify_commit_on_branch(baseline_commit, branch, REPOSITORY_NAME)
-    
-    if commit_exists:
-        print(f"✅ Build commit {baseline_commit[:8]} EXISTS on '{branch}' branch")
-    else:
-        print(f"⚠️  Build commit {baseline_commit[:8]} NOT FOUND on '{branch}' branch")
-        print(f"   This can happen if the build was from a different branch")
-    
-    # If build commit exists on dev branch, use it directly (most accurate)
-    # If it doesn't exist, check if there are any new commits on dev branch
-    if commit_exists:
-        print(f"✅ Using build commit {baseline_commit[:8]} directly (exists on '{branch}' branch)")
-        print(f"   This is the most accurate baseline for PR detection")
+    if custom_branch:
+        print(f"🚀 Custom branch provided: {custom_branch}")
+        print(f"🔍 Skipping PR checks and triggering build immediately...")
         
-        # DEBUG: Check if build commit is the latest on dev branch
-        print(f"\n🔍 Checking if build commit is the latest on '{branch}' branch...")
-        latest_commit = get_latest_commit_from_branch(branch, REPOSITORY_NAME)
-        if latest_commit:
-            print(f"   Latest commit on '{branch}' branch: {latest_commit[:8]}")
-            print(f"   Build commit: {baseline_commit[:8]}")
-            if latest_commit == baseline_commit:
-                print(f"   ✅ Build commit IS the latest on '{branch}' branch - no new PRs to deploy")
+        # Get baseline build info for monitoring
+        build_info = get_last_build_info(def_id, include_in_progress=False)
+        if not build_info:
+            build_info = {
+                'build_number': 'Initial',
+                'build_id': '0',
+                'source_version': 'latest',
+                'start_time': datetime.now().isoformat()
+            }
+        
+        baseline_commit = build_info['source_version']
+        
+        # Trigger build immediately
+        new_build_info = trigger_new_build(def_id, custom_branch)
+        if not new_build_info:
+            print("❌ Failed to trigger build for custom branch")
+            sys.exit(1)
+            
+        print(f"✅ Build {new_build_info['build_number']} triggered for branch '{custom_branch}'")
+        
+        # Create a dummy PR list for the message/monitoring
+        pr_merges = [{
+            'jira_ticket': 'CUSTOM',
+            'description': f'Manual deployment of branch: {custom_branch}',
+            'author': 'User',
+            'pr_number': 'N/A',
+            'commit_hash': 'N/A'
+        }]
+    else:
+        # Get the last successful/completed build to use as baseline
+        print("🔍 Checking for last successful build...")
+        build_info = get_last_build_info(def_id, include_in_progress=False)
+        
+        if not build_info:
+            print("❌ Failed to get build information")
+            sys.exit(1)
+        
+        print(f"✅ Using last successful build: {build_info['build_number']} (ID: {build_info['build_id']})")
+        print(f"   Status: {build_info.get('status', 'completed')}")
+        print(f"   Result: {build_info.get('result', 'N/A')}")
+        print()
+        
+        # For DEV pipeline: Find the commit on 'dev' branch that matches the build's deployment time
+        # This ensures we use the actual deployed commit, not just the build's source commit
+        baseline_commit = build_info['source_version']  # Default: commit from last successful build
+        
+        print(f"🔍 Finding baseline commit on '{branch}' branch...")
+        print(f"   Build commit: {baseline_commit[:8]}")
+        
+        # First verify if the build commit exists on dev branch
+        print(f"   Verifying if build commit {baseline_commit[:8]} exists on '{branch}' branch...")
+        commit_exists = verify_commit_on_branch(baseline_commit, branch, REPOSITORY_NAME)
+        
+        if commit_exists:
+            print(f"✅ Build commit {baseline_commit[:8]} EXISTS on '{branch}' branch")
+        else:
+            print(f"⚠️  Build commit {baseline_commit[:8]} NOT FOUND on '{branch}' branch")
+            print(f"   This can happen if the build was from a different branch")
+        
+        # If build commit exists on dev branch, use it directly (most accurate)
+        # If it doesn't exist, check if there are any new commits on dev branch
+        if commit_exists:
+            print(f"✅ Using build commit {baseline_commit[:8]} directly (exists on '{branch}' branch)")
+            print(f"   This is the most accurate baseline for PR detection")
+            
+            # DEBUG: Check if build commit is the latest on dev branch
+            print(f"\n🔍 Checking if build commit is the latest on '{branch}' branch...")
+            latest_commit = get_latest_commit_from_branch(branch, REPOSITORY_NAME)
+            if latest_commit:
+                print(f"   Latest commit on '{branch}' branch: {latest_commit[:8]}")
+                print(f"   Build commit: {baseline_commit[:8]}")
+                if latest_commit == baseline_commit:
+                    print(f"   ✅ Build commit IS the latest on '{branch}' branch - no new PRs to deploy")
+                    print()
+                    print("="*60)
+                    print("🚀 NO NEW DEPLOYMENT NEEDED")
+                    print("="*60)
+                    print("Build commit is the latest on dev branch.")
+                    print("No new PRs to deploy.")
+                    print("="*60)
+                    sys.exit(0)
+                else:
+                    print(f"   ⚠️  Build commit is NOT the latest - there are new commits on '{branch}' branch")
+        else:
+            # Build commit doesn't exist on dev branch - check if there are new commits
+            print(f"⚠️  Build commit {baseline_commit[:8]} not found on '{branch}' branch")
+            print(f"   This means the build was from a different branch or state")
+            print(f"   Checking if there are any new commits on '{branch}' branch...")
+            
+            # Get latest commit from dev branch to see if there are any new changes
+            latest_commit = get_latest_commit_from_branch(branch, REPOSITORY_NAME)
+            if latest_commit:
+                # Check if there are any commits after the build commit (even if build commit doesn't exist on dev)
+                # This will tell us if there are new PRs to deploy
+                print(f"   Latest commit on '{branch}' branch: {latest_commit[:8]}")
+                print(f"   Since build commit not found on '{branch}' branch, no valid baseline exists")
+                print(f"   No new PRs to deploy.")
                 print()
                 print("="*60)
                 print("🚀 NO NEW DEPLOYMENT NEEDED")
                 print("="*60)
-                print("Build commit is the latest on dev branch.")
+                print("Build commit not found on dev branch.")
                 print("No new PRs to deploy.")
                 print("="*60)
                 sys.exit(0)
             else:
-                print(f"   ⚠️  Build commit is NOT the latest - there are new commits on '{branch}' branch")
-                print(f"   📊 Latest commit on '{branch}': {latest_commit[:8]}")
-                print(f"   📊 Build commit: {baseline_commit[:8]}")
-                print(f"   📊 Difference: {len(pr_merges) if 'pr_merges' in locals() else 'N/A'} PRs detected")
-    else:
-        # Build commit doesn't exist on dev branch - check if there are new commits
-        print(f"⚠️  Build commit {baseline_commit[:8]} not found on '{branch}' branch")
-        print(f"   This means the build was from a different branch or state")
-        print(f"   Checking if there are any new commits on '{branch}' branch...")
+                print(f"⚠️  Could not get latest commit from '{branch}' branch")
+                print(f"   No new PRs to deploy.")
+                print()
+                print("="*60)
+                print("🚀 NO NEW DEPLOYMENT NEEDED")
+                print("="*60)
+                print("Build commit not found on dev branch.")
+                print("No new PRs to deploy.")
+                print("="*60)
+                sys.exit(0)
         
-        # Get latest commit from dev branch to see if there are any new changes
-        latest_commit = get_latest_commit_from_branch(branch, REPOSITORY_NAME)
-        if latest_commit:
-            # Check if there are any commits after the build commit (even if build commit doesn't exist on dev)
-            # This will tell us if there are new PRs to deploy
-            print(f"   Latest commit on '{branch}' branch: {latest_commit[:8]}")
-            print(f"   Since build commit not found on '{branch}' branch, no valid baseline exists")
-            print(f"   No new PRs to deploy.")
-            print()
-            print("="*60)
-            print("🚀 NO NEW DEPLOYMENT NEEDED")
-            print("="*60)
-            print("Build commit not found on dev branch.")
-            print("No new PRs to deploy.")
-            print("="*60)
-            sys.exit(0)
-        else:
-            print(f"⚠️  Could not get latest commit from '{branch}' branch")
-            print(f"   No new PRs to deploy.")
-            print()
-            print("="*60)
-            print("🚀 NO NEW DEPLOYMENT NEEDED")
-            print("="*60)
-            print("Build commit not found on dev branch.")
-            print("No new PRs to deploy.")
-            print("="*60)
-            sys.exit(0)
-    
-    print(f"✅ Using build as baseline: {build_info['build_number']} (ID: {build_info['build_id']})")
-    print(f"   Source commit: {build_info['source_version'][:8]}")
-    print(f"   Baseline commit for PR detection: {baseline_commit[:8]}")
-    print(f"   Build status: {build_info.get('status', 'completed')}")
-    print(f"   Pipeline: {pipeline_name}")
-    print(f"   Branch for PR detection: {branch}")
-    print()
-    
-    print(f"🔍 Checking for PRs merged after commit {baseline_commit[:8]} on '{branch}' branch...")
-    pr_merges = get_pr_merges_after_commit(baseline_commit, branch)
-    if pr_merges is None:
-        print("❌ Failed to get PR merges")
-        sys.exit(1)
-    
-    print(f"✅ Found {len(pr_merges)} PRs merged after build")
-    
-    # Debug: Show first few PRs to verify they're correct
-    if pr_merges:
-        print(f"\n📋 First 10 PRs detected (with commit hashes):")
-        for i, pr in enumerate(pr_merges[:10], 1):
-            print(f"   {i}. PR #{pr['pr_number']}: {pr.get('jira_ticket', 'N/A')} - {pr['description'][:50]}... (commit: {pr['commit_hash']})")
-        if len(pr_merges) > 10:
-            print(f"   ... and {len(pr_merges) - 10} more PRs")
+        print(f"✅ Using build as baseline: {build_info['build_number']} (ID: {build_info['build_id']})")
+        print(f"   Source commit: {build_info['source_version'][:8]}")
+        print(f"   Baseline commit for PR detection: {baseline_commit[:8]}")
+        print(f"   Build status: {build_info.get('status', 'completed')}")
+        print(f"   Pipeline: {pipeline_name}")
+        print(f"   Branch for PR detection: {branch}")
+        print()
         
-        # Show last few PRs to see the range
-        if len(pr_merges) > 10:
-            print(f"\n📋 Last 5 PRs detected:")
-            for i, pr in enumerate(pr_merges[-5:], len(pr_merges) - 4):
+        print(f"🔍 Checking for PRs merged after commit {baseline_commit[:8]} on '{branch}' branch...")
+        pr_merges = get_pr_merges_after_commit(baseline_commit, branch)
+        if pr_merges is None:
+            print("❌ Failed to get PR merges")
+            sys.exit(1)
+        
+        print(f"✅ Found {len(pr_merges)} PRs merged after build")
+        
+        # Debug: Show first few PRs to verify they're correct
+        if pr_merges:
+            print(f"\n📋 First 10 PRs detected (with commit hashes):")
+            for i, pr in enumerate(pr_merges[:10], 1):
                 print(f"   {i}. PR #{pr['pr_number']}: {pr.get('jira_ticket', 'N/A')} - {pr['description'][:50]}... (commit: {pr['commit_hash']})")
-    
-    # DEV pipeline doesn't create tags - just trigger build with branch
-    new_build_info = None
-    if pr_merges:
-        print(f"\n🔄 New changes detected! Triggering new build...")
-        new_build_info = trigger_new_build(def_id, branch)
-        if new_build_info:
-            print(f"✅ New build {new_build_info['build_number']} triggered successfully!")
-        else:
-            print(f"⚠️  Failed to trigger new build, will use existing build link")
+            if len(pr_merges) > 10:
+                print(f"   ... and {len(pr_merges) - 10} more PRs")
+            
+            # Show last few PRs to see the range
+            if len(pr_merges) > 10:
+                print(f"\n📋 Last 5 PRs detected:")
+                for i, pr in enumerate(pr_merges[-5:], len(pr_merges) - 4):
+                    print(f"   {i}. PR #{pr['pr_number']}: {pr.get('jira_ticket', 'N/A')} - {pr['description'][:50]}... (commit: {pr['commit_hash']})")
+        
+        # DEV pipeline doesn't create tags - just trigger build with branch
+        new_build_info = None
+        if pr_merges:
+            print(f"\n🔄 New changes detected! Triggering new build...")
+            new_build_info = trigger_new_build(def_id, branch)
+            if new_build_info:
+                print(f"✅ New build {new_build_info['build_number']} triggered successfully!")
+            else:
+                print(f"⚠️  Failed to trigger new build, will use existing build link")
     
     generate_deployment_message(build_info, pr_merges, new_build_info)
     
@@ -2435,6 +2474,7 @@ Examples:
     parser.add_argument('--no-background', action='store_true', help='Run monitoring in foreground (blocking)')
     parser.add_argument('--test-prs', action='store_true', help='Test PR detection - shows PRs merged after a commit')
     parser.add_argument('--commit', type=str, help='Commit hash to check PRs after (for --test-prs)')
+    parser.add_argument('--branch', type=str, help='Custom branch to deploy or test (source code branch)')
     
     args = parser.parse_args()
     
@@ -2446,7 +2486,7 @@ Examples:
         
         # DEV pipeline configuration
         def_id = BUILD_DEFINITION_ID  # Always 3274 for DEV
-        branch = BRANCH  # Always "dev" for DEV
+        branch = args.branch or BRANCH  # Use custom branch if provided, otherwise default to "dev"
         pipeline_name = "DEV"
         
         print(f"\n📋 Configuration:")
@@ -2540,7 +2580,7 @@ Examples:
     
     # If no specific action, run full workflow
     if not any([args.approval, args.deployment, args.approved, args.build_triggered, args.monitor]):
-        main_deployment_workflow()
+        main_deployment_workflow(custom_branch=args.branch)
         return
     
     # Sample data for testing individual functions
@@ -2611,7 +2651,7 @@ Examples:
             
             # DEV pipeline configuration
             def_id = BUILD_DEFINITION_ID  # Always 3274 for DEV
-            branch = BRANCH  # Always "dev" for DEV
+            branch = args.branch or BRANCH  # Use custom branch if provided, otherwise default to "dev"
             pipeline_name = "DEV"
             
             print(f"🔍 Monitoring build {args.build_id}...")

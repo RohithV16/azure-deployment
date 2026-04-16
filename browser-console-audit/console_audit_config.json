@@ -1,0 +1,44 @@
+{
+  "sitemaps": [
+    "https://www.mandg.com/adviser/gb/en.sitemap.xml",
+    "https://www.mandg.com/customer/gb/en.sitemap.xml"
+  ],
+  "urls": [],
+  "sitemap_domain_replace": {
+  },
+  "max_pages": 5,
+  "max_workers": 1,
+  "timeouts": {
+    "sitemap_fetch": 30,
+    "page_load": 60
+  },
+  "browser": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "rate_limit": {
+    "delay_ms": 0
+  },
+  "headers": {},
+  "cookies": [
+    {
+      "name": "aemaacs-traffic",
+      "value": "true",
+      "domain": "www.mandg.com",
+      "path": "/"
+    }
+  ],
+  "console_audit": {
+    "browsers": ["safari", "chrome", "edge", "firefox"],
+    "fallback_enabled": true,
+    "settle_seconds": 1.5,
+    "log_error": true,
+    "log_warning": true,
+    "log_info": false,
+    "log_log": false,
+    "log_debug": false
+  }
+}

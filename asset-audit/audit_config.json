@@ -1,0 +1,43 @@
+{
+  "urls": [],
+  "sitemaps": ["https://www.mandg.com/sitemap-cloud.xml"],
+  "asset_base_url": "https://assets.mandg.com/is/image/",
+  "production_asset_path": "mandgdigital",
+  "max_pages": 0,
+  "max_workers": 7,
+  "timeouts": {
+    "sitemap_fetch": 30,
+    "page_load": 60,
+    "network_idle": 2
+  },
+  "browser": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "cookies": [
+    {
+      "name": "aemaacs-traffic",
+      "value": "true",
+      "domain": ".mandg.com",
+      "path": "/"
+    }
+  ],
+  "rate_limit": {
+    "delay_ms": 1000
+  },
+  "exclude_patterns": [
+    "^data:image",
+    "google-analytics",
+    "googletagmanager",
+    "cookielaw.org",
+    "onetrust.com",
+    "linkedin",
+    "socialshare_image",
+    "shared/images/icons",
+    "customer/images/body-content",
+    "\\.svg"
+  ]
+}

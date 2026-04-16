@@ -804,7 +804,7 @@ def create_release_tag(pr_merges, branch="master", repo_name=REPOSITORY_NAME):
     # Increment version
     new_tag_name = increment_tag_version(latest_tag)
     
-    # Get the latest commit from master branch
+    # Get the latest commit from the target branch
     headers = get_azure_devops_headers()
     if not headers:
         return None
@@ -832,7 +832,7 @@ def create_release_tag(pr_merges, branch="master", repo_name=REPOSITORY_NAME):
         commits = commits_data.get('value', [])
         
         if not commits:
-            print("❌ No commits found on master branch")
+            print(f"❌ No commits found on {branch} branch")
             return None
         
         latest_commit = commits[0]
@@ -861,7 +861,7 @@ def create_release_tag(pr_merges, branch="master", repo_name=REPOSITORY_NAME):
         traceback.print_exc()
         return None
 
-def verify_commit_on_branch(commit_hash, branch="dev", repo_name=None):
+def verify_commit_on_branch(commit_hash, branch="master", repo_name=None):
     """Verify if a commit exists on a specific branch by trying to get commits from that commit on the branch"""
     headers = get_azure_devops_headers()
     if not headers:
@@ -1040,7 +1040,7 @@ def get_latest_commit_from_branch(branch="dev", repo_name=None):
         print(f"⚠️  Error getting latest commit: {e}")
         return None
 
-def get_pr_merges_after_commit(commit_hash, branch="dev"):
+def get_pr_merges_after_commit(commit_hash, branch="master"):
     """Get PRs merged after a specific commit using Azure DevOps API"""
     headers = get_azure_devops_headers()
     if not headers:
@@ -1383,7 +1383,7 @@ def send_teams_approved_message(webhook_url, pr_merges, build_info, approver_nam
         approved_message = f"""
 ✅ **DEPLOYMENT APPROVED**
 
-@{approver_name} has approved the deployment to DEV environment.
+@{approver_name} has approved the deployment to STAGE environment.
 
 **Approved PRs:**
 {pr_list}
@@ -1396,14 +1396,14 @@ def send_teams_approved_message(webhook_url, pr_merges, build_info, approver_nam
 
 **Build Status:** [View Build](https://mpcoderepo.visualstudio.com/DigitalExperience/_build/results?buildId={build_info['build_id']}&view=results)
 
-**Next Steps:** Deployment can now proceed to DEV environment.
+**Next Steps:** Deployment can now proceed to STAGE environment.
 **Estimated Completion Time:** ~30 minutes
         """
     else:
         approved_message = f"""
 ✅ **DEPLOYMENT APPROVED**
 
-The deployment to DEV environment has been approved.
+The deployment to STAGE environment has been approved.
 
 **Approved PRs:**
 {pr_list}
@@ -1416,7 +1416,7 @@ The deployment to DEV environment has been approved.
 
 **Build Status:** [View Build](https://mpcoderepo.visualstudio.com/DigitalExperience/_build/results?buildId={build_info['build_id']}&view=results)
 
-**Next Steps:** Deployment can now proceed to DEV environment.
+**Next Steps:** Deployment can now proceed to STAGE environment.
 **Estimated Completion Time:** ~30 minutes
         """
     
@@ -1685,6 +1685,11 @@ The deployment is still running. Current status update:
     else:
         # Send in-progress messages to the original Teams webhook
         target_webhook = TEAMS_WEBHOOK_URL
+    
+    # Fix environmental references in the message before sending
+    status_message = status_message.replace("to DEV environment", "to STAGE environment")
+    status_message = status_message.replace("to Dev environment", "to Stage environment")
+    status_message = status_message.replace("TO DEV TRIGGERED", "TO STAGE TRIGGERED")
     
     return send_teams_message(target_webhook, status_message.strip())
 
@@ -2082,9 +2087,9 @@ def generate_deployment_message(build_info, pr_merges, new_build_info=None):
         print()
         print("="*60)
     else:
-        print("🚀 DEPLOYMENT TO DEV TRIGGERED")
+        print("🚀 DEPLOYMENT TO STAGE TRIGGERED")
         print("="*60)
-        print("The following merged PRs have been getting deployed to the development environment:")
+        print("The following merged PRs have been getting deployed to the STAGE environment:")
         print()
         
         for pr in pr_merges:
@@ -2114,13 +2119,13 @@ def generate_deployment_message(build_info, pr_merges, new_build_info=None):
     if new_build_info:
         print(f"   New Build Triggered: {new_build_info['build_number']} (ID: {new_build_info['build_id']})")
 
-def main_deployment_workflow():
+def main_deployment_workflow(custom_branch=None):
     """Main deployment workflow for STAGE pipeline - fetches build info, triggers build, sends messages"""
     print("=== STAGE Pipeline Deployment Automation ===")
     
     # STAGE pipeline configuration
     def_id = BUILD_DEFINITION_ID  # Always 3308 for STAGE
-    branch = BRANCH  # Always "master" for STAGE
+    branch = custom_branch or BRANCH  # Use custom branch if provided, otherwise default to master
     pipeline_name = "STAGE"
     
     print(f"Using Pipeline: {pipeline_name} (Definition ID: {def_id})")
@@ -2365,6 +2370,7 @@ Examples:
     parser.add_argument('--approver-email', type=str, help='Email of person to tag for approval')
     parser.add_argument('--approver-name', type=str, help='Name of person who approved')
     parser.add_argument('--build-id', type=str, help='Build ID to monitor (for --monitor only)')
+    parser.add_argument('--branch', type=str, help='Custom branch to deploy from (defaults to master)')
     # STAGE pipeline script - no pipeline argument needed
     parser.add_argument('--no-background', action='store_true', help='Run monitoring in foreground (blocking)')
     parser.add_argument('--test-prs', action='store_true', help='Test PR detection - shows PRs merged after a commit')
@@ -2474,7 +2480,7 @@ Examples:
     
     # If no specific action, run full workflow
     if not any([args.approval, args.deployment, args.approved, args.build_triggered, args.monitor]):
-        main_deployment_workflow()
+        main_deployment_workflow(args.branch)
         return
     
     # Sample data for testing individual functions

@@ -1,0 +1,43 @@
+{
+  "sitemaps": ["https://www-stage.mandg.com/adviser/gb/en.sitemap.xml","https://www-stage.mandg.com/customer/gb/en.sitemap.xml"],
+  "urls": [
+  ],
+  "blacklisted_domains": [
+    "https://www-stage.mandg.com/",
+    "https://assets.mandg.com/is/content/mandgdigitalstage/",
+    "https://assets.mandg.com/is/content/mandgdigitaldevx/"
+  ],
+  "sitemap_domain_replace": {
+    "from":"https://www-stage.mandg.com/",
+    "to":"https://cloud-preview-stage.mandg.com/"
+  },
+  "max_pages": 0,
+  "max_workers": 15,
+  "max_retries": 1,
+  "capture_screenshots": false,
+  "timeouts": {
+    "sitemap_fetch": 30,
+    "page_load": 60,
+    "network_idle": 3
+  },
+  "browser": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "rate_limit": {
+    "delay_ms": 0
+  },
+  "headers": {
+  },
+  "cookies": [
+    {
+      "name": "aemaacs-traffic",
+      "value": "true",
+      "domain": "www.mandg.com",
+      "path": "/"
+    }
+  ]
+}

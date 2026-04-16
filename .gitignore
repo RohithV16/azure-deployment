@@ -1,0 +1,16 @@
+node_modules
+screenshots/
+venv/
+.ruff_cache/
+__pycache__
+.env
+
+audit_report_*
+asset-audit/reports/
+akamai-cache-audit/reports/
+unintended-domains/cache/
+unintended-domains/reports/
+unintended-domains/.DS_Store
+asset-audit/.DS_Store
+akamai-cache-audit/.DS_Store
+browser-console-audit/reports/
