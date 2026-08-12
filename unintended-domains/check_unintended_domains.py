@@ -464,6 +464,33 @@ def find_unintended_domains(
     return findings
 
 
+def detect_redirection(html: str) -> dict | None:
+    """Detects if a page is a redirection page based on HTML markup."""
+    if not html:
+        return None
+
+    # 1. JS Redirect: window.location.href = '...' or location.replace('...')
+    js_redirect = re.search(
+        r'(?:window\.|document\.)?location\.(?:href|replace)\s*=\s*["\']([^"\']+)["\']',
+        html,
+        re.IGNORECASE,
+    )
+    if js_redirect:
+        return {"type": "JS Redirect", "target": js_redirect.group(1)}
+
+    # 2. Anchor tag redirect: "This page has moved to <a href="...">here</a>"
+    # User mentioned "src in anchor tags", checking both href and src just in case
+    anchor_redirect = re.search(
+        r'moved\s+to\s+<a\s+[^>]*?(?:href|src)=["\']([^"\']+)["\']',
+        html,
+        re.IGNORECASE,
+    )
+    if anchor_redirect:
+        return {"type": "Anchor Tag Redirect", "target": anchor_redirect.group(1)}
+
+    return None
+
+
 async def check_page(
     url: str,
     context,
@@ -512,6 +539,7 @@ async def check_page(
             }
 
         findings = find_unintended_domains(html, blacklist, url)
+        redirection = detect_redirection(html)
 
         # Capture screenshot if findings found and screenshot folder provided and enabled
         screenshot_path = None
@@ -595,6 +623,7 @@ async def check_page(
             "url": url,
             "status": "FOUND" if findings else "OK",
             "findings": findings,
+            "redirection": redirection,
             "screenshot": screenshot_path,
             "index": -1,
             "from_cache": from_cache,
@@ -606,6 +635,7 @@ async def check_page(
             "url": url,
             "status": "FAILED",
             "findings": [],
+            "redirection": None,
             "index": -1,
             "from_cache": False,
             "reason": str(e),
@@ -667,20 +697,27 @@ def generate_report(results: list[dict], all_findings: list[dict], output_dir: P
     found_pages = [r for r in sorted_results if r["status"] == "FOUND"]
     not_found_pages = [r for r in sorted_results if r["status"] == "404_NOT_FOUND"]
     failed_pages = [r for r in sorted_results if r["status"] == "FAILED"]
+    redirect_pages = [r for r in sorted_results if r.get("redirection")]
     cache_hits = sum(1 for r in results if r.get("from_cache"))
 
     domain_summary = {}
     page_violation_counts = {}
     page_findings = {}
+    unique_assets_total = set()
+
     for finding in sorted_findings:
         domain = finding["domain"]
         attr = finding["attribute"]
         page_url = finding["page_url"]
+        asset_url = finding["url"]
+
+        unique_assets_total.add(asset_url)
 
         if domain not in domain_summary:
-            domain_summary[domain] = {"count": 0, "pages": set(), "attrs": {}}
+            domain_summary[domain] = {"count": 0, "pages": set(), "assets": set(), "attrs": {}}
         domain_summary[domain]["count"] += 1
         domain_summary[domain]["pages"].add(page_url)
+        domain_summary[domain]["assets"].add(asset_url)
         domain_summary[domain]["attrs"][attr] = domain_summary[domain]["attrs"].get(attr, 0) + 1
 
         page_violation_counts[page_url] = page_violation_counts.get(page_url, 0) + 1
@@ -711,6 +748,8 @@ def generate_report(results: list[dict], all_findings: list[dict], output_dir: P
         f.write(f"| Configured Scan Limit | {scan_limit} |\n")
         f.write(f"| Worker Count | {config.get('max_workers', 'N/A')} |\n")
         f.write(f"| Cache Hits | {cache_hits} |\n")
+        f.write(f"| **Total Unique Assets Found** | **{len(unique_assets_total)}** |\n")
+        f.write(f"| **Total Violations** | **{len(sorted_findings)}** |\n")
         f.write("\n---\n\n")
 
         f.write("## Scan Health\n\n")
@@ -726,18 +765,19 @@ def generate_report(results: list[dict], all_findings: list[dict], output_dir: P
             percent = (count / total_pages * 100) if total_pages else 0
             f.write(f"| {label} | {count} | {percent:5.1f}% |\n")
         f.write(f"| **Total Violations** | **{len(sorted_findings)}** | - |\n")
+        f.write(f"| **Redirection Pages** | **{len(redirect_pages)}** | {(len(redirect_pages) / total_pages * 100) if total_pages else 0:5.1f}% |\n")
         f.write("\n---\n\n")
 
         f.write("## Findings Summary\n\n")
         if not sorted_findings:
             f.write("No unintended domain findings were detected.\n\n")
         else:
-            f.write("| Blacklisted Domain | Violations | Affected Pages |\n")
-            f.write("|--------------------|-----------:|---------------:|\n")
+            f.write("| Blacklisted Domain | Unique Assets | Total Violations | Affected Pages |\n")
+            f.write("|--------------------|--------------:|-----------------:|---------------:|\n")
             for domain in sorted(domain_summary.keys()):
                 summary = domain_summary[domain]
                 f.write(
-                    f"| `{escape_md(domain)}` | {summary['count']} | {len(summary['pages'])} |\n"
+                    f"| `{escape_md(domain)}` | {len(summary['assets'])} | {summary['count']} | {len(summary['pages'])} |\n"
                 )
 
             for domain in sorted(domain_summary.keys()):
@@ -819,6 +859,20 @@ def generate_report(results: list[dict], all_findings: list[dict], output_dir: P
                 )
             if len(failed_pages) > 20:
                 f.write("\n</details>\n")
+        f.write("\n---\n\n")
+
+        f.write("## Redirection Pages\n\n")
+        if not redirect_pages:
+            f.write("No redirection pages detected in the markup.\n")
+        else:
+            f.write("| Page URL | Status | Redirection Type | Target Destination |\n")
+            f.write("|----------|--------|------------------|--------------------|\n")
+            for r in redirect_pages:
+                redir = r["redirection"]
+                status = r.get("status", "OK")
+                f.write(
+                    f"| `{escape_md(r['url'])}` | {status} | {redir['type']} | `{escape_md(redir['target'])}` |\n"
+                )
         f.write("\n---\n\n")
 
         f.write("## Visual Evidence\n\n")
@@ -1041,6 +1095,10 @@ async def main_async():
             progress_stats["completed"] = completed
 
             all_findings.extend(result["findings"])
+            if result.get("redirection"):
+                if args.verbose:
+                    print(f"{Colors.YELLOW}  -> Detected redirection: {result['redirection']['type']} to {result['redirection']['target']}{Colors.RESET}", file=sys.stderr)
+            
             if result["status"] == "OK":
                 progress_stats["ok"] += 1
             elif result["status"] == "FOUND":

@@ -1,0 +1,22 @@
+{
+  "sitemaps": [
+    "https://www.mandg.com/adviser/gb/en.sitemap.xml",
+    "https://www.mandg.com/customer/gb/en.sitemap.xml"
+  ],
+  "max_workers": 7,
+  "output_dir": "status-code-audit/reports",
+  "slow_resource_threshold": 3.0,
+  "limit": 0,
+  "headers": {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  "cookies": [
+    {
+      "name": "aemaacs-traffic",
+      "value": "true",
+      "domain": "www.mandg.com",
+      "path": "/"
+    }
+  ],
+  "auth": null
+}

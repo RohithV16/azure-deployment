@@ -1,18 +1,20 @@
 {
-  "sitemaps": [],
+  "sitemaps": ["https://www.mandg.com/adviser/gb/en.sitemap.xml","https://www.mandg.com/customer/gb/en.sitemap.xml"],
   "urls": [
-    "https://www-stage.mandg.com/qa/qa---sample-page/qa-1/adw-419-3/adw-7204---mixed-font-weights"
   ],
   "blacklisted_domains": [
-    "https://cloud-preview-stage.mandg.com/",
-    "https://assets.mandg.com/is/content/mandgdigital/",
+    "https://assets.mandg.com/is/content/mandgdigitalstage/",
     "https://assets.mandg.com/is/content/mandgdigitaldevx/",
-    "https://s7g10.scene7.com/"
+    "https://s7g10.scene7.com/",
+    "https://cloud-preview.mandg.com",
+    "https://www.dev.day.com/",
+    "https://www-stage.mandg.com",
+    "https://showcase-www-stage.mandg.com"
   ],
   "sitemap_domain_replace": {
   },
   "max_pages": 0,
-  "max_workers": 1,
+  "max_workers": 10,
   "max_retries": 1,
   "capture_screenshots": false,
   "timeouts": {

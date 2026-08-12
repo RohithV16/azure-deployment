@@ -45,10 +45,10 @@ BRANCH = "master"  # STAGE pipeline uses master branch
 REPOSITORY_NAME = "aemaacs-life"
 
 # Teams webhook URL
-TEAMS_WEBHOOK_URL = "https://aegisdentsunetwork.webhook.office.com/webhookb2/c448e610-8c38-45ad-a939-db5a4ece46d5@6e8992ec-76d5-4ea5-8eae-b0c5e558749a/IncomingWebhook/0dc0e4fca542427fb3d6a02281a88574/d881b4fa-b65f-4e61-bb1a-b48354c99b1c/V2WHmoL-a3Tw0P84hKNYK4FI_U6TSWBShEDdqyLnsn9p41"
+TEAMS_WEBHOOK_URL = ""
 
 # FOR Deployment Notifications to all users
-POWER_AUTOMATE_WEBHOOK_URL = "https://default6e8992ec76d54ea58eaeb0c5e55874.9a.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/1c9b143d398747a6892388f31a230f87/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=tzPM2LVcleQ3UCpAWZG46rQ7-3W5qtXOgrTjAHHYIcw"
+POWER_AUTOMATE_WEBHOOK_URL = ""
 ...
 # STAGE pipeline configuration - no need for mapping functions
 
@@ -1202,6 +1202,9 @@ def get_pr_merges_after_commit(commit_hash, branch="master"):
 
 def send_teams_message(webhook_url, message):
     """Send message to Teams channel or Power Automate webhook"""
+    if not webhook_url or not webhook_url.strip():
+        print("⚠️  Teams/Power Automate webhook URL is not configured. Skipping message send and continuing.")
+        return True
     
     payload = {}
     
@@ -1255,6 +1258,10 @@ def send_teams_message(webhook_url, message):
 
 def send_teams_approval_request(webhook_url, pr_merges, build_info, approver_email=None, pipeline_name="DEV"):
     """Send clean Microsoft Teams approval request"""
+    if not webhook_url or not webhook_url.strip():
+        print("⚠️  Teams approval webhook URL is not configured. Skipping approval message and continuing workflow.")
+        return True
+
     pr_list = ""
     for i, pr in enumerate(pr_merges, 1):
         if pr['jira_ticket']:

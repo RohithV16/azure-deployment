@@ -14,3 +14,4 @@ unintended-domains/.DS_Store
 asset-audit/.DS_Store
 akamai-cache-audit/.DS_Store
 browser-console-audit/reports/
+status-code-audit/reports/*
